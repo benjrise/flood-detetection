@@ -1,2 +1,1 @@
-cd spacenet8/
-python train_foundation_features.py
+/users/benjrise/volatile/train_foundation.sh

@@ -10,3 +10,4 @@ statsmodels==0.13.2
 geopandas==0.10.2
 albumentations==1.2.1
 opencv-python-headless<4.3
+efficientnet-pytorch==0.7.1
