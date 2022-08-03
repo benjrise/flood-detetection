@@ -21,7 +21,7 @@ class FoundationConfig:
 
     RUN_NAME : str = "HRNET_X2_FULL_BS1"
     
-    MODEL : str = "hrnet"
+    MODEL : str = "efficientnet-b3"
     PRETRAIN : bool = True
 
     IMG_SIZE : tuple = (2600, 2600)
@@ -38,7 +38,7 @@ class FoundationConfig:
 
 
     NORMALIZE : float = True
-    TRAIN_CROP : tuple = (512, 512)
+    TRAIN_CROP : tuple = (650, 650)
     VALIDATION_CROP : tuple = None
     P_FLIPS : float = 0
 
@@ -88,7 +88,7 @@ class FoundationConfig:
 
 
 
-def get_config(num):
+def get_config1(num):
     if num == 1:
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
@@ -427,8 +427,168 @@ def get_config(num):
 
     return config
     
+def get_config(num):
+    if num==1:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments",
+                BATCH_SIZE=8,
+                VAL_BATCH_SIZE=1,
+                RUN_NAME="hrnet_JAC",
+                MODEL="hrnet",
+                IMG_SIZE=(1300,1300),
+                TRAIN_CROP=(512,512),
+                VALIDATION_CROP=(1024, 1024),
+
+                BUILDING_JACCARD_WEIGHT=0.25,
+                BCE_LOSS_WEIGHT=0.75
+                )
+
+    elif num == 2:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments",
+                BATCH_SIZE=8,
+                VAL_BATCH_SIZE=1,
+                RUN_NAME="HRENT_UPSAMPLEX2_JAC",
+                MODEL="hrnet",
+                IMG_SIZE=(2600,2600),
+                TRAIN_CROP=(512,512),
+                VALIDATION_CROP=(1024, 1024),
+                
+
+                BUILDING_JACCARD_WEIGHT=0.25,
+                BCE_LOSS_WEIGHT=0.75
+        )
+    elif num == 3:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments",
+                BATCH_SIZE=8,
+                VAL_BATCH_SIZE=1,
+                RUN_NAME="HRENT_UPSAMPLEX3_JAC",
+                MODEL="hrnet",
+                IMG_SIZE=(3900,3900),
+                TRAIN_CROP=(512,512),
+                VALIDATION_CROP=(1024, 1024),
+                
+
+                BUILDING_JACCARD_WEIGHT=0.25,
+                BCE_LOSS_WEIGHT=0.75
+        )
+    
+
+    elif num == 4:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments",
+                BATCH_SIZE=8,
+                VAL_BATCH_SIZE=1,
+                RUN_NAME="HRENT_UPSAMPLEX2",
+                MODEL="hrnet",
+                IMG_SIZE=(2600,2600),
+                TRAIN_CROP=(512,512),
+                VALIDATION_CROP=(1024, 1024),
+
+        )
+    elif num == 5:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments",
+                BATCH_SIZE=8,
+                VAL_BATCH_SIZE=1,
+                RUN_NAME="HRENT_UPSAMPLEX3",
+                MODEL="hrnet",
+                IMG_SIZE=(3900,3900),
+                TRAIN_CROP=(512,512),
+                VALIDATION_CROP=(1024, 1024),
+        )
+
+    if num==6:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments",
+                BATCH_SIZE=8,
+                VAL_BATCH_SIZE=1,
+                RUN_NAME="HRNET",
+                MODEL="hrnet",
+                IMG_SIZE=(1300,1300),
+                TRAIN_CROP=(512,512),
+                VALIDATION_CROP=(1024, 1024),
+                )
+
+    if num==7:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments",
+                BATCH_SIZE=8,
+                VAL_BATCH_SIZE=1,
+                RUN_NAME="efficientnet-b3",
+                MODEL="efficientnet-b3",
+                IMG_SIZE=(1300,1300),
+                TRAIN_CROP=(512,512),
+                VALIDATION_CROP=(1024, 1024),
+                )
+
+
+    if num == 8:
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments",
+                    BATCH_SIZE=8,
+                    VAL_BATCH_SIZE=1,
+                    RUN_NAME="efficinetb4",
+                    MODEL="efficientnet-b4",
+                    IMG_SIZE=(1300,1300),
+                    TRAIN_CROP=(512,512),
+                    VALIDATION_CROP=(1024, 1024),
+            
+                    )
+    if num == 9: 
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments",
+                    BATCH_SIZE=8,
+                    VAL_BATCH_SIZE=1,
+                    RUN_NAME="efficinetb5",
+                    MODEL="efficientnet-b5",
+                    IMG_SIZE=(1300,1300),
+                    TRAIN_CROP=(512,512),
+                    VALIDATION_CROP=(1024, 1024),
+                    )
+    return config
+    
 
 
 @dataclass
 class FloodConfig:
-    MIXED_PRECISION : bool = False
+    MIXED_PRECISION : bool = True
+
+    TRAIN_CSV : str = "areas_of_interest/sn8_data_train.csv"
+    VAL_CSV : str = "areas_of_interest/sn8_data_val.csv"
+    VALIDATION_LOOP_CSV : str = "areas_of_interest/sn8_data_val.csv"
+
+    SAVE_CSV : str = "flood_debug/"
+    MODEL_NAME : str = "resnet34"
+    LR : float = 1e-4
+    BATCH_SIZE : int = 8
+    N_EPOCHS : int = 30
+
+    IMG_SIZE : tuple = (2600, 2600)
+
+    VALID_CROP = (1300, 1300)
+
+    GPU : int = 0
+
+    SAVE_FIG : bool = True
+    SAVE_PRED : bool = False
+

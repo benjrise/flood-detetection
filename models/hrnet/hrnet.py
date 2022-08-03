@@ -422,6 +422,7 @@ class HighResolutionNet(nn.Module):
         return nn.Sequential(*modules), num_inchannels
 
     def forward(self, x):
+        img_size = (x.shape[2], x.shape[3])
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -456,9 +457,9 @@ class HighResolutionNet(nn.Module):
 
         # Upsampling
         x0_h, x0_w = x[0].size(2), x[0].size(3)
-        x1 = F.upsample(x[1], size=(x0_h, x0_w), mode='bilinear')
-        x2 = F.upsample(x[2], size=(x0_h, x0_w), mode='bilinear')
-        x3 = F.upsample(x[3], size=(x0_h, x0_w), mode='bilinear')
+        x1 = F.interpolate(x[1], size=(x0_h, x0_w), mode='bilinear')
+        x2 = F.interpolate(x[2], size=(x0_h, x0_w), mode='bilinear')
+        x3 = F.interpolate(x[3], size=(x0_h, x0_w), mode='bilinear')
 
         x = torch.cat([x[0], x1, x2, x3], 1)
 
@@ -466,8 +467,8 @@ class HighResolutionNet(nn.Module):
         roads = self.road_layer(x)
 
         # Upsample to input size
-        buildings = F.upsample(buildings, scale_factor=4)
-        roads = F.upsample(roads, scale_factor=4)
+        buildings = F.interpolate(buildings, size=img_size, mode='bilinear')
+        roads = F.interpolate(roads, size=img_size, mode='bilinear')
 
         return buildings, roads
 

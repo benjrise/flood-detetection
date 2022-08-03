@@ -92,8 +92,8 @@ if __name__ == "__main__":
 
     # In case of multi-gpu can select differnt gpus by setting gpu = 0,1,2,3
     device = torch.device(f'cuda:{gpu}') 
-    SEED=12
-    torch.manual_seed(SEED)
+    # SEED=12
+    # torch.manual_seed(SEED)
     save_dir = config.SAVE_DIR
     assert(os.path.exists(save_dir))
     save_dir = os.path.join(save_dir, f"{run_name}_lr{'{:.2e}'.format(initial_lr)}_bs{batch_size}_{date_total}")
@@ -237,6 +237,7 @@ if __name__ == "__main__":
                         loss = loss_fn.forward(building_pred, road_pred,
                                             building, roadspeed)
                         for key, value in loss_fn.stash_metrics.items():
+                                key = f"valid_{key}"
                                 if key not in val_metrics:
                                     val_metrics[key] = value
                                 else:
@@ -254,7 +255,7 @@ if __name__ == "__main__":
                     #         fig = get_prediction_fig(image, gt,  predictions)
                     #         writer.add_figure(f"EPOCH {epoch} - ITERATION {idx}", fig, global_step=epoch)
                     
-                    out_loss = val_metrics["loss"]
+                    out_loss = val_metrics["valid_loss"]
                     print(f"    {str(np.round(i/len(val_dataloader)*100,2))}%: VAL LOSS: {(out_loss*1.0/(i+1))}", end="\r")
 
 
@@ -262,12 +263,13 @@ if __name__ == "__main__":
                 val_metrics[key] /= len(val_dataloader)
 
             # write_metrics_epoch(epoch, fieldnames, train_metrics, val_metrics, training_log_csv)
+            print(val_metrics)
             log_to_tensorboard(writer, val_metrics, epoch)
-            scheduler.step(val_metrics["loss"])
+            scheduler.step(val_metrics["valid_loss"])
 
             save_model_checkpoint(model, checkpoint_model_path)
 
-            epoch_val_loss = val_metrics["loss"]
+            epoch_val_loss = val_metrics["valid_loss"]
             if epoch_val_loss < best_loss:
                 print(f"    loss improved from {np.round(best_loss, 6)} to {np.round(epoch_val_loss, 6)}. saving best model...")
                 best_loss = epoch_val_loss

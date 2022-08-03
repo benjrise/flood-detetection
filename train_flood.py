@@ -3,6 +3,7 @@ import os
 import argparse
 import datetime
 from datetime import datetime
+from flood_eval import flood_final_eval_loop
 
 import torch
 import torch.nn as nn
@@ -57,8 +58,7 @@ def write_metrics_epoch(epoch, fieldnames, train_metrics, val_metrics, training_
         writer.writerow(merged_metrics)
 
 def log_to_tensorboard(writer, metrics, n_iter):
-    for key, value in metrics:
-        print(key, value)
+    for key, value in metrics.items():
         writer.add_scalar(key, value,global_step=n_iter)
         
 def save_model_checkpoint(model, checkpoint_model_path): 
@@ -83,21 +83,21 @@ models = {
 }
 
 if __name__ ==  "__main__":
-    args = parse_args()
-    train_csv = args.train_csv
-    val_csv = args.val_csv
-    save_dir = args.save_dir
-    model_name = args.model_name
-    initial_lr = args.lr
-    batch_size = args.batch_size
-    n_epochs = args.n_epochs
-    gpu = args.gpu
+    # args = parse_args()
     config = FloodConfig()
+    train_csv = config.TRAIN_CSV
+    val_csv = config.VAL_CSV
+    save_dir = config.SAVE_CSV
+    model_name = config.MODEL_NAME
+    initial_lr = config.LR
+    batch_size = config.BATCH_SIZE
+    n_epochs = config.N_EPOCHS
+    gpu = config.GPU
     
     now = datetime.now() 
     date_total = str(now.strftime("%d-%m-%Y-%H-%M"))
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
+    # os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
 
 
     soft_dice_loss_weight = 0.25
@@ -108,7 +108,7 @@ if __name__ ==  "__main__":
     road_loss_weight = 0.5
     building_loss_weight = 0.5
 
-    img_size = (1300,1300)
+    img_size = config.IMG_SIZE
 
     SEED=12
     torch.manual_seed(SEED)
@@ -143,11 +143,11 @@ if __name__ ==  "__main__":
                             transforms=validation_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, num_workers=4, batch_size=batch_size)
 
-    #model = models["resnet34"](num_classes=5, num_channels=6)
-    if model_name == "unet_siamese":
-        model = UNetSiamese(3, num_classes, bilinear=True)
-    else:
-        model = models[model_name](num_classes=num_classes, num_channels=3)
+    model = models["resnet34"](num_classes=5, num_channels=6)
+    # if model_name == "unet_siamese":
+    #     model = UNetSiamese(3, num_classes, bilinear=True)
+    # else:
+    #     model = models[model_name](num_classes=num_classes, num_channels=3)
 
     model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr)
@@ -176,8 +176,10 @@ if __name__ ==  "__main__":
 
             preimg, postimg, building, road, roadspeed, flood = data
 
-            preimg = preimg.cuda().float()
-            postimg = postimg.cuda().float()
+            # preimg = preimg.cuda().float()
+            # postimg = postimg.cuda().float()
+            combinedimg = torch.cat((preimg, postimg), dim=1)
+            combinedimg = combinedimg.cuda().float()
 
             flood = flood.numpy()
             flood_shape = flood.shape
@@ -187,8 +189,8 @@ if __name__ ==  "__main__":
             flood = torch.tensor(flood).cuda()
             
             with torch.cuda.amp.autocast(enabled=config.MIXED_PRECISION):
-                # flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
-                flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
+                flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
+                #flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
 
                 #y_pred = F.sigmoid(flood_pred)
                 #focal_l = focal(y_pred, flood)
@@ -214,7 +216,8 @@ if __name__ ==  "__main__":
         #train_tot_dice = (train_soft_dice_loss*1.0/len(train_dataloader)).item()
         current_lr = scheduler.get_last_lr()[0]
         scheduler.step()
-        train_metrics = {"lr":current_lr, "train_tot_loss":train_tot_loss}
+        train_metrics = {"lr": current_lr, "train_tot_loss": train_tot_loss}
+        
         log_to_tensorboard(writer, train_metrics, epoch)
 
         # validation
@@ -228,10 +231,10 @@ if __name__ ==  "__main__":
             for i, data in enumerate(val_dataloader):
                 preimg, postimg, building, road, roadspeed, flood = data
 
-                #combinedimg = torch.cat((preimg, postimg), dim=1)
-                #combinedimg = combinedimg.cuda().float()
-                preimg = preimg.cuda().float()
-                postimg = postimg.cuda().float()
+                combinedimg = torch.cat((preimg, postimg), dim=1)
+                combinedimg = combinedimg.cuda().float()
+                # preimg = preimg.cuda().float()
+                # postimg = postimg.cuda().float()
 
                 flood = flood.numpy()
                 flood_shape = flood.shape
@@ -246,20 +249,22 @@ if __name__ ==  "__main__":
 
                 flood = torch.tensor(flood).cuda()
 
-                # flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
-                flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
+                with torch.cuda.amp.autocast(enabled=config.MIXED_PRECISION):
+
+                    flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
+                    # flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
 
 
-                #y_pred = F.sigmoid(flood_pred)
-                #focal_l = focal(y_pred, flood)
-                #dice_soft_l = soft_dice_loss(y_pred, flood)
-                #loss = (focal_loss_weight * focal_l + soft_dice_loss_weight * dice_soft_l)
+                    #y_pred = F.sigmoid(flood_pred)
+                    #focal_l = focal(y_pred, flood)
+                    #dice_soft_l = soft_dice_loss(y_pred, flood)
+                    #loss = (focal_loss_weight * focal_l + soft_dice_loss_weight * dice_soft_l)
 
-                loss = celoss(flood_pred, flood.long())
+                    loss = celoss(flood_pred, flood.long())
 
-                #val_focal_loss += focal_l
-                #val_soft_dice_loss += dice_soft_l
-                val_loss_val += loss
+                    #val_focal_loss += focal_l
+                    #val_soft_dice_loss += dice_soft_l
+                    val_loss_val += loss
 
                 print(f"    {str(np.round(i/len(val_dataloader)*100,2))}%: VAL LOSS: {(val_loss_val*1.0/(i+1)).item()}", end="\r")
 
@@ -280,3 +285,5 @@ if __name__ ==  "__main__":
             print(f"    loss improved from {np.round(best_loss, 6)} to {np.round(epoch_val_loss, 6)}. saving best model...")
             best_loss = epoch_val_loss
             save_best_model(model, best_model_path)
+
+    flood_final_eval_loop(config, model, val_dataset, save_dir)

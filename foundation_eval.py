@@ -17,8 +17,8 @@ import torch.nn as nn
 import models.pytorch_zoo.unet as unet
 from models.other.unet import UNet
 from datasets.datasets import SN8Dataset
-from utils.utils import write_geotiff
-from models.hrnet.hrnet import HighResolutionNet
+from utils.utils import get_transforms, write_geotiff
+from models.hrnet.hrnet import HighResolutionNet, get_seg_model
 from models.hrnet.hr_config import get_hrnet_config
 
 def parse_args():
@@ -337,7 +337,20 @@ def foundation_final_eval_loop(config : FoundationConfig,
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    # args = parse_args()
+    model_config = get_hrnet_config("models/hrnet/hr_config.yml")
+    model = get_seg_model(model_config, pretrain=True)
+
+    config = FoundationConfig(IMG_SIZE=(2600, 2600), SAVE_PRED=True)
+    _, validation_transforms = get_transforms()
+    val_dataset = SN8Dataset(config.VAL_CSV,
+                            data_to_load=["preimg","building","roadspeed"],
+                            img_size=(2600, 2600),
+                            transforms=validation_transforms)
+
+    foundation_final_eval_loop(config, model, val_dataset, "upsample_experiments/HRENT_UPSAMPLEX2_lr1.00e-04_bs8_02-08-2022-13-25/")
+
+
     # model_path = args.model_path
     # in_csv = args.in_csv
     # save_fig_dir = args.save_fig_dir
