@@ -1,4 +1,5 @@
 
+from http.client import CannotSendRequest
 import torch
 from matplotlib import pyplot as plt, transforms
 from matplotlib.patches import Rectangle
@@ -6,6 +7,11 @@ from pyparsing import TokenConverter
 from datasets.datasets import SN8Dataset, return_batched_patches
 from utils.utils import get_transforms
 import albumentations as A
+from models.hrnet.hr_config import get_hrnet_config
+from models.hrnet.hrnet import HighResolutionNet, get_seg_model
+from models.efficientnet.efficient_unet import EfficientNet_Unet
+
+
 
 train_transforms, val_transforms = get_transforms()
 
@@ -15,21 +21,58 @@ val_dataset = SN8Dataset("areas_of_interest/sn8_data_val.csv",
                         transforms=val_transforms
                         )
 
+
+config = get_hrnet_config("models/hrnet/hr_config.yml")
+model = get_seg_model(config)
+model.load_state_dict(torch.load("upsample_experiments/HRENT_UPSAMPLEX2_lr1.00e-04_bs8_01-08-2022-19-55/best_model.pth"))
 image =  val_dataset[0][0].unsqueeze(0)
 out_image = torch.zeros_like(image)
 mask = val_dataset[0][4].unsqueeze(0)
-images_batched, patches_order = return_batched_patches(image, mask)
-full_images = torch.cat(images_batched)
+images_batched, mask,  patches_order = return_batched_patches(image, [mask], patch_size=(1300, 1300), bs=1)
 
+print(patches_order)
+
+buildings = []
+roads = []
+for batch in images_batched:
+    print("here")
+    print(batch.shape)
+    pred_building, pred_road = model(batch)
+    buildings.append(pred_building)
+    roads.append(pred_road)
+
+buildings = torch.cat(buildings)
+roads = torch.cat(roads) 
+
+buildings_out = torch.zeros(1, buildings.shape[1], 2600, 2600)
+ones = torch.zeros_like(buildings_out)
+print(buildings.shape)
+print(roads.shape)
+
+for building_patch, patch in zip(buildings, patches_order):
+    buildings_out[:,:, patch[0]:patch[2], patch[1]:patch[3]] += building_patch
+    ones[:,:, patch[0]:patch[2], patch[1]:patch[3]] += 1
+
+buildings_out= buildings_out/ones
+full_images = torch.cat(images_batched)
+print(ones)
+#print(mask[end])
 for image, patch in zip (full_images, patches_order):
     out_image[:, :, patch[0]:patch[2], patch[1]:patch[3]] = image
 
 
-plt.imshow(out_image.squeeze(0).permute(1, 2 , 0)) 
+# fig, axes = plt.subplots()
+plt.imshow(buildings_out.squeeze(0).permute(1, 2 , 0).detach().numpy()) 
+#axes[1].imshow(mask[0].squeeze(0).permute(1, 2 , 0).detach().numpy())
 plt.savefig("reconstruct")
+
+plt.imshow(ones.squeeze(0).permute(1, 2 , 0).detach().numpy()) 
+plt.savefig("ones")
+
 #x = [torch.rand(1, 3, 512, 512), torch.rand(1, 3, 512, 512)]
 # y = torch.cat(x)
 # print(y.shape)
+print([[] for _ in range(3)])
 
 
 # def calculate_slice_bboxes(

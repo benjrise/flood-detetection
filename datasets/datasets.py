@@ -201,41 +201,43 @@ def calculate_slice_bboxes(
 
 
 
-def return_batched_patches(image, mask, patch_size=(650,650), bs=4):
+def return_batched_patches(image, masks : list, patch_size=(650,650), bs=4):
+    assert  type(masks) is list
     image_h = image.shape[2]
     image_w = image.shape[3]
     patches = calculate_slice_bboxes(image_h, 
                             image_w, 
                             patch_size[0],
                             patch_size[1],
-                            0,
-                            0)
-    
+                            0.1,
+                            0.1)
+
     patch_order = []
     image_slices = []
-    mask_slices = []
+    mask_slices = [[] for _ in range(len(masks))]
     for patch in patches:
         y, x = patch[0], patch[1]
         h = patch[2]-patch[0]
         w = patch[3]-patch[1]
         slice = crop(image, y, x, h, w)
-        mask_slice = crop(mask, y, x, h, w)
+        for idx, mask in enumerate(masks):
+            mask_slices[idx].append(crop(mask, y, x, h, w))
         image_slices.append(slice)
-        mask_slices.append(mask_slice)
         patch_order.append(patch)
 
     image_batches = []
-    
+    mask_batches = [[] for _ in range(len(masks))]
     for i in range(-(len(image_slices)//-bs)):
         start = i*bs
         end = i*bs+bs
         if end > len(image_slices):
-            end =len(image_slices)
+            end = len(image_slices)
+        img_sec = image_slices[start:end]
+        image_batches.append(torch.cat(img_sec))
+        for idx, masks in enumerate(mask_slices):
+            mask_batches[idx].append(torch.cat(masks[start:end]))
 
-        subsec = image_slices[start:end]
-        image_batches.append(torch.cat(subsec))
-
-    return image_batches, patch_order
+    return image_batches, mask_batches, patch_order
 
 
 if __name__ == "__main__":
