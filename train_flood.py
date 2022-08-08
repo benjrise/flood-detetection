@@ -131,7 +131,7 @@ if __name__ ==  "__main__":
         writer.writeheader()
     writer = SummaryWriter()
     
-    train_transforms, validation_transforms = get_transforms()
+    train_transforms, validation_transforms = get_transforms(crop=config.TRAIN_CROP)
     train_dataset = SN8Dataset(train_csv,
                             data_to_load=["preimg","postimg","flood"],
                             img_size=img_size,
@@ -143,11 +143,11 @@ if __name__ ==  "__main__":
                             transforms=validation_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, num_workers=4, batch_size=batch_size)
 
-    model = models["resnet34"](num_classes=5, num_channels=6)
-    # if model_name == "unet_siamese":
-    #     model = UNetSiamese(3, num_classes, bilinear=True)
-    # else:
-    #     model = models[model_name](num_classes=num_classes, num_channels=3)
+    # model = models["resnet34"](num_classes=5, num_channels=6)
+    if model_name == "unet_siamese":
+        model = UNetSiamese(3, num_classes, bilinear=True)
+    else:
+        model = models[model_name](num_classes=num_classes, num_channels=3)
 
     model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr)
@@ -176,10 +176,10 @@ if __name__ ==  "__main__":
 
             preimg, postimg, building, road, roadspeed, flood = data
 
-            # preimg = preimg.cuda().float()
-            # postimg = postimg.cuda().float()
-            combinedimg = torch.cat((preimg, postimg), dim=1)
-            combinedimg = combinedimg.cuda().float()
+            preimg = preimg.cuda().float()
+            postimg = postimg.cuda().float()
+            # combinedimg = torch.cat((preimg, postimg), dim=1)
+            # combinedimg = combinedimg.cuda().float()
 
             flood = flood.numpy()
             flood_shape = flood.shape
@@ -189,8 +189,8 @@ if __name__ ==  "__main__":
             flood = torch.tensor(flood).cuda()
             
             with torch.cuda.amp.autocast(enabled=config.MIXED_PRECISION):
-                flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
-                #flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
+                # flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
+                flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
 
                 #y_pred = F.sigmoid(flood_pred)
                 #focal_l = focal(y_pred, flood)
@@ -231,10 +231,10 @@ if __name__ ==  "__main__":
             for i, data in enumerate(val_dataloader):
                 preimg, postimg, building, road, roadspeed, flood = data
 
-                combinedimg = torch.cat((preimg, postimg), dim=1)
-                combinedimg = combinedimg.cuda().float()
-                # preimg = preimg.cuda().float()
-                # postimg = postimg.cuda().float()
+                # combinedimg = torch.cat((preimg, postimg), dim=1)
+                # combinedimg = combinedimg.cuda().float()
+                preimg = preimg.cuda().float()
+                postimg = postimg.cuda().float()
 
                 flood = flood.numpy()
                 flood_shape = flood.shape
@@ -251,8 +251,8 @@ if __name__ ==  "__main__":
 
                 with torch.cuda.amp.autocast(enabled=config.MIXED_PRECISION):
 
-                    flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
-                    # flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
+                    # flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
+                    flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
 
 
                     #y_pred = F.sigmoid(flood_pred)

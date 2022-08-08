@@ -672,7 +672,7 @@ if __name__ == "__main__":
     skeleton_band = 7
     num_channels = 3
     log_to_console = 1
-    speed_conversion_file = "speed_conversion_key.csv"
+    speed_conversion_file = "postprocessing/roads/speed_conversion_key.csv"
     num_classes = 8
     mask_prefix = ""
 

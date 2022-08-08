@@ -16,7 +16,8 @@ import torch.nn as nn
 import models.pytorch_zoo.unet as unet
 from datasets.datasets import SN8Dataset
 from models.other.unet import UNetSiamese
-from utils.utils import write_geotiff
+from utils.utils import get_transforms, write_geotiff
+from utils.validation_utils import validate_flood_patches
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -132,19 +133,15 @@ def flood_final_eval_loop(config : FloodConfig,
         save_preds_dir = None
 
     num_classes = 5
-    img_size = (1300,1300)
-
+    img_size = config.IMG_SIZE
     # os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
 
-    # val_dataset = SN8Dataset(in_csv,
-    #                         data_to_load=["preimg","postimg","flood"],
-    #                         img_size=img_size)
+    _, valid_transforms = get_transforms()
+    val_dataset = SN8Dataset(in_csv,
+                            data_to_load=["preimg","postimg","flood"],
+                            img_size=img_size,
+                            transforms=valid_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1)
-
-    # if model_name == "unet_siamese":
-    #     model = UNetSiamese(3, num_classes, bilinear=True)
-    # else:
-    #     model = models[model_name](num_classes=num_classes, num_channels=3)
 
     model.load_state_dict(torch.load(model_path))
     model.cuda()
@@ -169,6 +166,7 @@ def flood_final_eval_loop(config : FloodConfig,
     positives = [[],[],[],[]]
 
     model.eval()
+    device = torch.device("cuda:0")
     val_loss_val = 0
     with torch.no_grad():
         for i, data in enumerate(val_dataloader):
@@ -177,17 +175,23 @@ def flood_final_eval_loop(config : FloodConfig,
             print("evaluating: ", i, os.path.basename(current_image_filename))
             preimg, postimg, building, road, roadspeed, flood = data
 
-            preimg = preimg.cuda().float() #siamese
-            postimg = postimg.cuda().float() #siamese
+            # preimg = preimg.cuda().float() #siamese
+            # postimg = postimg.cuda().float() #siamese
             
             flood = flood.numpy()
+            
             flood_shape = flood.shape
             flood = np.append(np.zeros(shape=(flood_shape[0],1,flood_shape[2],flood_shape[3])), flood, axis=1)
             flood = np.argmax(flood, axis = 1)
-            
             flood = torch.tensor(flood).cuda()
-
-            flood_pred = model(preimg, postimg) # siamese resnet34 with stacked preimg+postimg input
+            
+            with torch.cuda.amp.autocast():
+                flood_pred = validate_flood_patches(preimg, postimg,
+                                                model, device, patch_size=(1024, 1024),
+                                                bs=1, overlap_height_ratio=0.2,
+                                                overlap_width_ratio=0.2)
+                 # siamese resnet34 with stacked preimg+postimg input
+            
             flood_pred = torch.nn.functional.softmax(flood_pred, dim=1).cpu().numpy()[0] # (5, H, W)
             #for i in flood_pred:
             #    plt.imshow(i)
@@ -306,6 +310,9 @@ def flood_final_eval_loop(config : FloodConfig,
     w = csv.writer(open(config_path, "w"))
     for key, val in out_config.items():
         w.writerow([key, val])
+
+
+
 
 
 if __name__ == "__main__":

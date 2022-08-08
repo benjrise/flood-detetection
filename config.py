@@ -93,7 +93,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX2",
@@ -107,7 +107,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX3",
@@ -121,7 +121,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="resnet34_UPSAMPLEX2",
@@ -135,7 +135,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="resnet34_UPSAMPLEX3",
@@ -148,7 +148,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX2_JAC",
@@ -165,7 +165,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX3_JAC",
@@ -182,7 +182,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="resnet34_UPSAMPLEX2_JACC",
@@ -199,7 +199,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="resnet34_UPSAMPLEX3_JACC",
@@ -218,7 +218,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="unet_UPSAMPLEX2_JACC",
@@ -236,7 +236,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX2_JAC_FOC",
@@ -254,7 +254,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX3_JAC_FOC",
@@ -272,7 +272,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="resnet34_UPSAMPLEX2_JACC_FOC",
@@ -290,7 +290,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="resnet34_UPSAMPLEX3_JACC_FOC",
@@ -310,7 +310,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="efficinetb3_UPSAMPLEX2_JACC_FOC",
@@ -327,7 +327,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX2_NOPRETRAIN",
@@ -341,7 +341,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="HRENT_UPSAMPLEX2_SGD",
@@ -355,7 +355,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="efficinetb3_UPSAMPLEX2_JACC",
@@ -372,7 +372,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="efficinetb3_UPSAMPLEX2",
@@ -387,7 +387,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="resnet34",
@@ -401,7 +401,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="hrnet",
@@ -415,7 +415,7 @@ def get_config1(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
+                SAVE_DIR="upsample_experiments2",
                 BATCH_SIZE=8,
                 VAL_BATCH_SIZE=1,
                 RUN_NAME="efficientnet-b3",
@@ -432,13 +432,13 @@ def get_config(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
-                BATCH_SIZE=8,
-                VAL_BATCH_SIZE=1,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
                 RUN_NAME="hrnet_JAC",
                 MODEL="hrnet",
                 IMG_SIZE=(1300,1300),
-                TRAIN_CROP=(512,512),
+                TRAIN_CROP=(1024, 1024),
                 VALIDATION_CROP=(1024, 1024),
 
                 BUILDING_JACCARD_WEIGHT=0.25,
@@ -449,13 +449,13 @@ def get_config(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
-                BATCH_SIZE=8,
-                VAL_BATCH_SIZE=1,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
                 RUN_NAME="HRENT_UPSAMPLEX2_JAC",
                 MODEL="hrnet",
                 IMG_SIZE=(2600,2600),
-                TRAIN_CROP=(512,512),
+                TRAIN_CROP=(1024, 1024),
                 VALIDATION_CROP=(1024, 1024),
                 
 
@@ -466,13 +466,13 @@ def get_config(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
-                BATCH_SIZE=8,
-                VAL_BATCH_SIZE=1,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
                 RUN_NAME="HRENT_UPSAMPLEX3_JAC",
                 MODEL="hrnet",
                 IMG_SIZE=(3900,3900),
-                TRAIN_CROP=(512,512),
+                TRAIN_CROP=(1024, 1024),
                 VALIDATION_CROP=(1024, 1024),
                 
 
@@ -485,13 +485,13 @@ def get_config(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
-                BATCH_SIZE=8,
-                VAL_BATCH_SIZE=1,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
                 RUN_NAME="HRENT_UPSAMPLEX2",
                 MODEL="hrnet",
-                IMG_SIZE=(2600,2600),
-                TRAIN_CROP=(512,512),
+                IMG_SIZE=(2600, 2600),
+                TRAIN_CROP=(1024, 1024),
                 VALIDATION_CROP=(1024, 1024),
 
         )
@@ -499,13 +499,13 @@ def get_config(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
-                BATCH_SIZE=8,
-                VAL_BATCH_SIZE=1,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
                 RUN_NAME="HRENT_UPSAMPLEX3",
                 MODEL="hrnet",
                 IMG_SIZE=(3900,3900),
-                TRAIN_CROP=(512,512),
+                TRAIN_CROP=(1024, 1024),
                 VALIDATION_CROP=(1024, 1024),
         )
 
@@ -513,13 +513,13 @@ def get_config(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
-                BATCH_SIZE=8,
-                VAL_BATCH_SIZE=1,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
                 RUN_NAME="HRNET",
                 MODEL="hrnet",
                 IMG_SIZE=(1300,1300),
-                TRAIN_CROP=(512,512),
+                TRAIN_CROP=(1024, 1024),
                 VALIDATION_CROP=(1024, 1024),
                 )
 
@@ -527,44 +527,196 @@ def get_config(num):
         config = FoundationConfig(
                 VAL_EVERY_N_EPOCH=1,
                 NUM_EPOCHS=120,
-                SAVE_DIR="upsample_experiments",
-                BATCH_SIZE=8,
-                VAL_BATCH_SIZE=1,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
                 RUN_NAME="efficientnet-b3",
                 MODEL="efficientnet-b3",
                 IMG_SIZE=(1300,1300),
-                TRAIN_CROP=(512,512),
+                TRAIN_CROP=(1024, 1024),
+                VALIDATION_CROP=(1024, 1024),
+                )
+    
+    if num==8:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
+                RUN_NAME="efficientnet-b3_X2",
+                MODEL="efficientnet-b3",
+                IMG_SIZE=(2600, 2600),
+                TRAIN_CROP=(1024, 1024),
                 VALIDATION_CROP=(1024, 1024),
                 )
 
 
-    if num == 8:
+
+    if num == 9:
         config = FoundationConfig(
                     VAL_EVERY_N_EPOCH=1,
                     NUM_EPOCHS=120,
-                    SAVE_DIR="upsample_experiments",
-                    BATCH_SIZE=8,
-                    VAL_BATCH_SIZE=1,
-                    RUN_NAME="efficinetb4",
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
+                    RUN_NAME="efficinetb4_X2",
                     MODEL="efficientnet-b4",
-                    IMG_SIZE=(1300,1300),
-                    TRAIN_CROP=(512,512),
+                    IMG_SIZE=(2600, 2600),
+                    TRAIN_CROP=(1024,1024),
                     VALIDATION_CROP=(1024, 1024),
             
                     )
-    if num == 9: 
+    if num == 10: 
         config = FoundationConfig(
                     VAL_EVERY_N_EPOCH=1,
                     NUM_EPOCHS=120,
-                    SAVE_DIR="upsample_experiments",
-                    BATCH_SIZE=8,
-                    VAL_BATCH_SIZE=1,
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
                     RUN_NAME="efficinetb5",
                     MODEL="efficientnet-b5",
                     IMG_SIZE=(1300,1300),
-                    TRAIN_CROP=(512,512),
+                    TRAIN_CROP=(1024,1024),
                     VALIDATION_CROP=(1024, 1024),
                     )
+
+    if num == 11:
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
+                    RUN_NAME="efficinetb5_X2",
+                    MODEL="efficientnet-b5",
+                    IMG_SIZE=(1300,1300),
+                    TRAIN_CROP=(1024,1024),
+                    VALIDATION_CROP=(1024, 1024),
+                    )
+
+    if num == 12:
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
+                    RUN_NAME="efficinetb4_X3",
+                    MODEL="efficientnet-b4",
+                    IMG_SIZE=(3900, 3900),
+                    TRAIN_CROP=(1024,1024),
+                    VALIDATION_CROP=(1024, 1024),
+                    )
+
+    
+    if num==13:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
+                RUN_NAME="efficientnet-b3_JACC",
+                MODEL="efficientnet-b3",
+                IMG_SIZE=(1300,1300),
+                TRAIN_CROP=(1024, 1024),
+                VALIDATION_CROP=(1024, 1024),
+                PRETRAIN=False,
+
+                BUILDING_JACCARD_WEIGHT=0.25,
+                BCE_LOSS_WEIGHT=0.75
+                )
+    
+    if num==14:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=1,
+                NUM_EPOCHS=120,
+                SAVE_DIR="upsample_experiments2",
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
+                RUN_NAME="efficientnet-b3_X2_JACC",
+                MODEL="efficientnet-b3",
+                IMG_SIZE=(2600, 2600),
+                TRAIN_CROP=(1024, 1024),
+                VALIDATION_CROP=(1024, 1024),
+
+                BUILDING_JACCARD_WEIGHT=0.25,
+                BCE_LOSS_WEIGHT=0.75
+                )
+
+
+
+    if num == 15:
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
+                    RUN_NAME="efficinetb4_X2_JACC",
+                    MODEL="efficientnet-b4",
+                    IMG_SIZE=(2600, 2600),
+                    TRAIN_CROP=(1024,1024),
+                    VALIDATION_CROP=(1024, 1024),
+
+                    BUILDING_JACCARD_WEIGHT=0.25,
+                    BCE_LOSS_WEIGHT=0.75
+            
+                    )
+    if num == 16: 
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
+                    RUN_NAME="efficinetb5_JACC",
+                    MODEL="efficientnet-b5",
+                    IMG_SIZE=(1300,1300),
+                    TRAIN_CROP=(1024,1024),
+                    VALIDATION_CROP=(1024, 1024),
+
+                    BUILDING_JACCARD_WEIGHT=0.25,
+                    BCE_LOSS_WEIGHT=0.75
+                    )
+
+    if num == 17:
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
+                    RUN_NAME="efficinetb5_X2_JACC",
+                    MODEL="efficientnet-b5",
+                    IMG_SIZE=(1300,1300),
+                    TRAIN_CROP=(1024,1024),
+                    VALIDATION_CROP=(1024, 1024),
+
+                    BUILDING_JACCARD_WEIGHT=0.25,
+                    BCE_LOSS_WEIGHT=0.75
+                    )
+
+    if num == 18:
+        config = FoundationConfig(
+                    VAL_EVERY_N_EPOCH=1,
+                    NUM_EPOCHS=120,
+                    SAVE_DIR="upsample_experiments2",
+                    BATCH_SIZE=4,
+                    VAL_BATCH_SIZE=4,
+                    RUN_NAME="efficinetb4_X3_JACC",
+                    MODEL="efficientnet-b4",
+                    IMG_SIZE=(3900, 3900),
+                    TRAIN_CROP=(1024,1024),
+                    VALIDATION_CROP=(1024, 1024),
+
+                    BUILDING_JACCARD_WEIGHT=0.25,
+                    BCE_LOSS_WEIGHT=0.75
+                    )
+
+    
+    
     return config
     
 
@@ -578,17 +730,18 @@ class FloodConfig:
     VALIDATION_LOOP_CSV : str = "areas_of_interest/sn8_data_val.csv"
 
     SAVE_CSV : str = "flood_debug/"
-    MODEL_NAME : str = "resnet34"
+    MODEL_NAME : str = "resnet34_siamese"
     LR : float = 1e-4
-    BATCH_SIZE : int = 8
+    BATCH_SIZE : int = 4
     N_EPOCHS : int = 30
 
     IMG_SIZE : tuple = (2600, 2600)
 
-    VALID_CROP = (1300, 1300)
+    TRAIN_CROP = (1024, 1024)
+    VALID_CROP = (1024, 1024)
 
     GPU : int = 0
 
     SAVE_FIG : bool = True
-    SAVE_PRED : bool = False
+    SAVE_PRED : bool = True
 

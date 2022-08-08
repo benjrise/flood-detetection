@@ -5,9 +5,11 @@ Fiona==1.8.21
 Shapely==1.8.2
 geojson==2.5.0
 utm==0.7.0
-osmnx==1.1.2
+osmnx==0.9
+geopandas==0.6.3
+#osmnx==1.1.2
+#geopandas==0.10.2
 statsmodels==0.13.2
-geopandas==0.10.2
 albumentations==1.2.1
 opencv-python-headless<4.3
 efficientnet-pytorch==0.7.1

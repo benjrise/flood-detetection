@@ -2,16 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 Directly from: https://github.com/avanetten/cresi
-
 with small modifications
 """
 
 
 """
 Created on Tue May  8 00:10:40 2018
-
 @author: avanetten
-
 Read in a list of wkt linestrings, render to networkx graph, with geo coords
 Note:
     osmnx.simplify_graph() is fragile and often returns erroneous projections
@@ -943,9 +940,11 @@ def wkt_to_G(params):
             edge_tmp = list(G1.edges())[-1]
             print(edge_tmp, "random edge props:", G1.get_edge_data(edge_tmp[0], edge_tmp[1]))
 
+        
         if verbose:
             print ("projecting graph...")
         G_projected = ox.project_graph(G1)
+        #print(G_projected.edges(data=True))
         #for i,(u,v,attr_dict) in enumerate(G1.edges(data=True)):
             #if "geometry" not in attr_dict:
             #    print("hello")
@@ -1225,7 +1224,7 @@ if __name__ == "__main__":
     # the new graphs are a result of several cleaning steps and also includes length of edges as an attribute.
 
     simplify_graph = True #True # False
-    verbose = False #sFalse
+    verbose = True #sFalse
     super_verbose = False
     make_plots = True #True
     save_shapefiles = True #False

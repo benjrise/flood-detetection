@@ -155,89 +155,101 @@ class SN8Dataset(Dataset):
             data[key] = transform_data[key]    
         return data
 
-from torchvision.transforms.functional import crop
-
-def calculate_slice_bboxes(
-    image_height: int,
-    image_width: int,
-    slice_height: int = 512,
-    slice_width: int = 512,
-    overlap_height_ratio: float = 0.2,
-    overlap_width_ratio: float = 0.2,
-):
-    """
-    Given the height and width of an image, calculates how to divide the image into
-    overlapping slices according to the height and width provided. These slices are returned
-    as bounding boxes in xyxy format.
-    :param image_height: Height of the original image.
-    :param image_width: Width of the original image.
-    :param slice_height: Height of each slice
-    :param slice_width: Width of each slice
-    :param overlap_height_ratio: Fractional overlap in height of each slice (e.g. an overlap of 0.2 for a slice of size 100 yields an overlap of 20 pixels)
-    :param overlap_width_ratio: Fractional overlap in width of each slice (e.g. an overlap of 0.2 for a slice of size 100 yields an overlap of 20 pixels)
-    :return: a list of bounding boxes in xyxy format
-    """
-
-    slice_bboxes = []
-    y_max = y_min = 0
-    y_overlap = int(overlap_height_ratio * slice_height)
-    x_overlap = int(overlap_width_ratio * slice_width)
-    while y_max < image_height:
-        x_min = x_max = 0
-        y_max = y_min + slice_height
-        while x_max < image_width:
-            x_max = x_min + slice_width
-            if y_max > image_height or x_max > image_width:
-                xmax = min(image_width, x_max)
-                ymax = min(image_height, y_max)
-                xmin = max(0, xmax - slice_width)
-                ymin = max(0, ymax - slice_height)
-                slice_bboxes.append([xmin, ymin, xmax, ymax])
-            else:
-                slice_bboxes.append([x_min, y_min, x_max, y_max])
-            x_min = x_max - x_overlap
-        y_min = y_max - y_overlap
-    return slice_bboxes
 
 
 
-def return_batched_patches(image, masks : list, patch_size=(650,650), bs=4):
-    assert  type(masks) is list
-    image_h = image.shape[2]
-    image_w = image.shape[3]
-    patches = calculate_slice_bboxes(image_h, 
-                            image_w, 
-                            patch_size[0],
-                            patch_size[1],
-                            0.1,
-                            0.1)
 
-    patch_order = []
-    image_slices = []
-    mask_slices = [[] for _ in range(len(masks))]
-    for patch in patches:
-        y, x = patch[0], patch[1]
-        h = patch[2]-patch[0]
-        w = patch[3]-patch[1]
-        slice = crop(image, y, x, h, w)
-        for idx, mask in enumerate(masks):
-            mask_slices[idx].append(crop(mask, y, x, h, w))
-        image_slices.append(slice)
-        patch_order.append(patch)
+# def calculate_slice_bboxes(
+#     image_height: int,
+#     image_width: int,
+#     slice_height: int = 512,
+#     slice_width: int = 512,
+#     overlap_height_ratio: float = 0.2,
+#     overlap_width_ratio: float = 0.2,
+# ):
+#     """
+#     Given the height and width of an image, calculates how to divide the image into
+#     overlapping slices according to the height and width provided. These slices are returned
+#     as bounding boxes in xyxy format.
+#     :param image_height: Height of the original image.
+#     :param image_width: Width of the original image.
+#     :param slice_height: Height of each slice
+#     :param slice_width: Width of each slice
+#     :param overlap_height_ratio: Fractional overlap in height of each slice (e.g. an overlap of 0.2 for a slice of size 100 yields an overlap of 20 pixels)
+#     :param overlap_width_ratio: Fractional overlap in width of each slice (e.g. an overlap of 0.2 for a slice of size 100 yields an overlap of 20 pixels)
+#     :return: a list of bounding boxes in xyxy format
+#     """
 
-    image_batches = []
-    mask_batches = [[] for _ in range(len(masks))]
-    for i in range(-(len(image_slices)//-bs)):
-        start = i*bs
-        end = i*bs+bs
-        if end > len(image_slices):
-            end = len(image_slices)
-        img_sec = image_slices[start:end]
-        image_batches.append(torch.cat(img_sec))
-        for idx, masks in enumerate(mask_slices):
-            mask_batches[idx].append(torch.cat(masks[start:end]))
+#     slice_bboxes = []
+#     y_max = y_min = 0
+#     y_overlap = int(overlap_height_ratio * slice_height)
+#     x_overlap = int(overlap_width_ratio * slice_width)
+#     while y_max < image_height:
+#         x_min = x_max = 0
+#         y_max = y_min + slice_height
+#         while x_max < image_width:
+#             x_max = x_min + slice_width
+#             if y_max > image_height or x_max > image_width:
+#                 xmax = min(image_width, x_max)
+#                 ymax = min(image_height, y_max)
+#                 xmin = max(0, xmax - slice_width)
+#                 ymin = max(0, ymax - slice_height)
+#                 slice_bboxes.append([xmin, ymin, xmax, ymax])
+#             else:
+#                 slice_bboxes.append([x_min, y_min, x_max, y_max])
+#             x_min = x_max - x_overlap
+#         y_min = y_max - y_overlap
+#     return slice_bboxes
 
-    return image_batches, mask_batches, patch_order
+# # def get_patches(img_h, img_w, patch_h, patch_w):
+# #     num_y = -(img_h // -patch_h)
+# #     num_x = -(img_w // -patch_w)
+# #     for 
+
+
+# def return_batched_patches(image, 
+#                         patch_size, 
+#                         bs=4, 
+#                         overlap_height_ratio : float = 0.1, 
+#                         overlap_width_ratio: float = 0.1):
+
+#     image_h = image.shape[2]
+#     image_w = image.shape[3]
+#     patches = calculate_slice_bboxes(image_h, 
+#                             image_w, 
+#                             patch_size[0],
+#                             patch_size[1],
+#                             overlap_height_ratio,
+#                             0.1)
+
+
+
+#     patch_order = []
+#     image_slices = []
+#     # mask_slices = [[] for _ in range(len(masks))]
+#     for patch in patches:
+#         y, x = patch[0], patch[1]
+#         h = patch[2]-patch[0]
+#         w = patch[3]-patch[1]
+#         crop_slice = crop(image, y, x, h, w)
+#         # for idx, mask in enumerate(masks):
+#         #     mask_slices[idx].append(crop(mask, y, x, h, w))
+#         image_slices.append(crop_slice)
+#         patch_order.append(patch)
+
+#     image_batches = []
+#     # mask_batches = [[] for _ in range(len(masks))]
+#     for i in range(-(len(image_slices)//-bs)):
+#         start = i*bs
+#         end = i*bs+bs
+#         if end > len(image_slices):
+#             end = len(image_slices)
+#         img_sec = image_slices[start:end]
+#         image_batches.append(torch.cat(img_sec))
+#         # for idx, masks in enumerate(mask_slices):
+#         #     mask_batches[idx].append(torch.cat(masks[start:end]))
+
+#     return image_batches, patch_order
 
 
 if __name__ == "__main__":
