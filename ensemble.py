@@ -11,12 +11,30 @@ from osgeo import gdal
 from osgeo import osr
 from utils.utils import write_geotiff
 import torch
+import argparse
 
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--predictions_dir",
+                        type=str,
+                        default="predictions")
+    parser.add_argument("--ground_truth_dir",
+                        type=str,
+                        default="ground_truth")
+    parser.add_argument("--out_dir",
+                        type=str,
+                        default="foundation_predictions")
+    parser.add_argument("--train_predictions_dir",
+                        type=str)
+    parser.add_argument("--train_out")
+    args = parser.parse_args()
+    return args
 
 def average_strategy(images):
     return np.average(images, axis=0)
@@ -58,12 +76,15 @@ def ensemble_image(args_list):
     building_prediction = np.rint(building_prediction).astype(int)
     roadspeed_prediction = np.rint(road_prediction).astype(int)
 
+    with open("foundation_save/building_road_predictions.npy", "wb") as f:
+        np.savez(f, building_prediction=building_prediction, 
+                    roadspeed_prediction=roadspeed_prediction[-1])
+
     predictions = np.zeros((2, 8, building_prediction.shape[0], building_prediction.shape[1]))
     predictions[0,0] = building_prediction
     predictions[1,:] = roadspeed_prediction
             
     if save_preds_dir is not None:
-        # THIS MAY NOT WORK CHECK
         # road_pred_arr = (road_prediction * 255).astype(np.uint8) # to be compatible with the SN5 eval and road speed prediction, need to mult by 255
         road_pred_arr = (roadspeed_prediction * 255).astype(np.uint8)
         ds = gdal.Open(current_image_filename)
@@ -116,21 +137,53 @@ def ensemble_image(args_list):
 
     return  metrics  
 
+def ensemble_train_image(args_list):
+    image, dirs, out_dir = args_list
+    save_preds_dir = out_dir
+    building_predictions = []
+    road_predictions = []
+    current_image_filename = ''
+    
+    for dir in dirs:
+        path = os.path.join(dir, image)
+        with open(path, "rb") as f:
+            in_prediction = np.load(f)
+            building_predictions.append(in_prediction["building_prediction"])
+            road_predictions.append(in_prediction["road_prediction"])
+            current_image_filename = str(in_prediction["tif_path"])
+    
+
+    road_predictions = np.array(road_predictions)
+    road_prediction = average_strategy(road_predictions)
+    building_predictions = np.array(building_predictions)
+    building_prediction = average_strategy(building_predictions)
+    
+    building_prediction = torch.sigmoid(torch.from_numpy(building_prediction)).numpy()[0]
+    road_prediction = torch.sigmoid(torch.from_numpy(road_prediction)).numpy()
+
+    building_prediction = np.rint(building_prediction).astype(int)
+    roadspeed_prediction = np.rint(road_prediction).astype(int)
+
+    out = os.path.join(out_dir, os.path.basename(current_image_filename).replace(".tif","npy"))
+    with open(out, "wb") as f:
+        np.savez(f, building_prediction=building_prediction, 
+                    roadspeed_prediction=roadspeed_prediction[-1])
+    # make_prediction_png_roads_buildings(preimg, gts, predictions, save_figure_filename)
+
 
 if __name__ == "__main__":
-    predictions_dir = "predictions/"
+
+    args = parse_args()
+    predictions_dir = args.predictions_dir
+    gt_dir = args.ground_truth_dir
+    out_dir = args.out_dir
+    
     dirs = [os.path.join(predictions_dir, d) for d in os.listdir(predictions_dir)]
     n_threads = 16
-    
     images = os.listdir(dirs[0])
-    out_dir = "foundation_predictions/"
-    gt_dir = "ground_truth/"
     args_list = []
-
-    # print("here")
     for image in images:
         args_list.append((image, dirs, out_dir, gt_dir))
-    
 
     running_tp = [0,0] 
     running_fp = [0,0]
@@ -140,15 +193,12 @@ if __name__ == "__main__":
     with Pool(n_threads) as pool:
         with tqdm(total=len(args_list)) as pbar:
             for metrics in pool.imap_unordered(ensemble_image, args_list):
-
                 for idx, (union, tp, fp, fn) in enumerate(metrics):
                     running_tp[idx] += tp
                     running_fp[idx] += fp
                     running_fn[idx] += fn
                     running_union[idx] += union
-                
                 pbar.update()
-
 
     print()
     data = ["building", "road"]
@@ -178,3 +228,19 @@ if __name__ == "__main__":
         w.writeheader()
         for k in out:
             w.writerow({field: out[k].get(field) or k for field in fields})
+    
+    if args.train_predictions_dir:
+        dirs = [os.path.join(args.train_predictions_dir, d) for d in os.listdir(args.train_predictions_dir)]
+        n_threads = 16
+        out_dir = args.train_out
+        args_list = []
+        images = os.listdir(dirs[0])
+
+        for image in images:
+            args_list.append((image, dirs, out_dir))
+        
+        with Pool(n_threads) as pool:
+            with tqdm(total=len(args_list)) as pbar:
+                for _ in pool.imap_unordered(ensemble_train_image, args_list):
+                    pbar.update()
+        

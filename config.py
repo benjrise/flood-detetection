@@ -12,14 +12,14 @@ class FoundationConfig:
 
     MIXED_PRECISION : bool = True
     VAL_EVERY_N_EPOCH : int = 3
-    NUM_EPOCHS : int = 1
-    SAVE_DIR : str = "debug"
+    NUM_EPOCHS : int = 120
+    SAVE_DIR : str = "upsample_experiments2"
 
     GPU : int = 0
     BATCH_SIZE : int = 8
-    VAL_BATCH_SIZE : int = 1
+    VAL_BATCH_SIZE : int = 4
 
-    RUN_NAME : str = "HRNET_X2_FULL_BS1"
+    RUN_NAME : str = "efficient-freeze-encoder"
     
     MODEL : str = "efficientnet-b3"
     PRETRAIN : bool = True
@@ -39,7 +39,7 @@ class FoundationConfig:
 
     NORMALIZE : float = True
     TRAIN_CROP : tuple = (650, 650)
-    VALIDATION_CROP : tuple = None
+    VALIDATION_CROP : tuple = (1024,1024)
     P_FLIPS : float = 0
 
     PATIENCE : int = 8
@@ -47,45 +47,169 @@ class FoundationConfig:
 
     PLOT_EVERY : int = 10
 
-
     # FINAL EVAL LOOP
     FINAL_EVAL_LOOP : bool = True
     SAVE_FIG : bool = True
     SAVE_PRED : bool = None
 
-
     # CUDNN FLAGS
     CUDNN_BENCHMARK : bool = False
     CUDNN_ENABLED : bool = False
 
+    # OPTIMIZER PARAMS
     OPTIMIZER : str = 'adamw'
-    #MOMENTUM : float = 0
+    LR : float = 1e-4
+    MOMENTUM : float = 0.0
+
+    # MULTI_MODEL
+    TEST_CSV : str = ""
+    MULTI_SAVE_PATH : str = "foundation_predictions"
+    MULTI_TRAIN_SAVE_PATH : str = "foundation_training_predictions"
+    MULTI_MODEL : bool = False
+    MULTI_MODEL_EVAL : bool = False
+    SAVE_TRAINING_PREDS : bool = True
     
+    def __post_init__(self):
+        if self.OPTIMIZER == 'sgd':
+            self.LR = 1e-2
+            self.MOMENTUM = 0.9
+        else:
+            self.LR = 1e-4
+        
+        if not self.TEST_CSV:
+            self.TEST_CSV = self.VALIDATION_LOOP_CSV
 
     def get_optimizer(self, model):
         eps = 1e-7
-        WEIGHT_DECAY = 0
-
         if self.OPTIMIZER == 'adamw':
-            LR = 1e-4
             return torch.optim.AdamW(model.parameters(), 
-                                    lr=LR, 
+                                    lr=self.LR, 
                                     eps=eps,
-                                    weight_decay=WEIGHT_DECAY)
+                                    )
         if self.OPTIMIZER == 'adam':
-            LR = 1e-4
             return torch.optim.AdamW(model.parameters(), 
-                                    lr=LR, 
+                                    lr=self.LR, 
                                     eps=eps,
-                                    weight_decay=WEIGHT_DECAY)
+                                    )
         if self.OPTIMIZER == 'sgd':
-            LR = 1e-2
-            MOMENTUM = 0.9
             return torch.optim.SGD(model.parameters(), 
-                                    lr=LR,
-                                    momentum=MOMENTUM,
-                                    weight_decay=WEIGHT_DECAY)
+                                    lr=self.LR,
+                                    momentum=self.MOMENTUM)
 
+
+def get_multi_config(num):
+    VAL_EVERY_N_EPOCH=1
+    NUM_EPOCHS=120
+    SAVE_DIR="foundation_save"
+    IMG_SIZE=(2600, 2600)
+    TRAIN_CROP=(1024, 1024)
+    VALIDATION_CROP=(1024, 1024)
+    FINAL_EVAL_LOOP=False,
+    
+    MULTI_SAVE_PATH = "foundation_validation_preds",
+    MULTI_TRAIN_SAVE_PATH = "foundation_train_preds",
+    MULTI_MODEL = True,
+    MULTI_MODEL_EVAL = True
+    
+
+    TEST_CSV = "areas_of_interest/sn8_data_val.csv"
+    if num==1:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=VAL_EVERY_N_EPOCH,
+                NUM_EPOCHS=NUM_EPOCHS,
+                SAVE_DIR=SAVE_DIR,
+                IMG_SIZE=IMG_SIZE,
+                TRAIN_CROP=TRAIN_CROP,
+                VALIDATION_CROP=VALIDATION_CROP,
+                FINAL_EVAL_LOOP=FINAL_EVAL_LOOP,
+                MULTI_SAVE_PATH=MULTI_SAVE_PATH,
+                MULTI_TRAIN_SAVE_PATH=MULTI_TRAIN_SAVE_PATH,
+                MULTI_MODEL=MULTI_MODEL,
+                MULTI_MODEL_EVAL=MULTI_MODEL_EVAL,
+                TEST_CSV=TEST_CSV,
+                
+                
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
+                RUN_NAME="efficientnet-b3_X2",
+                MODEL="efficientnet-b3",
+                GPU=num-1
+                )
+
+    if num==2:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=VAL_EVERY_N_EPOCH,
+                NUM_EPOCHS=NUM_EPOCHS,
+                SAVE_DIR=SAVE_DIR,
+                IMG_SIZE=IMG_SIZE,
+                TRAIN_CROP=TRAIN_CROP,
+                VALIDATION_CROP=VALIDATION_CROP,
+                FINAL_EVAL_LOOP=FINAL_EVAL_LOOP,
+                MULTI_SAVE_PATH=MULTI_SAVE_PATH,
+                MULTI_TRAIN_SAVE_PATH=MULTI_TRAIN_SAVE_PATH,
+                MULTI_MODEL=MULTI_MODEL,
+                MULTI_MODEL_EVAL=MULTI_MODEL_EVAL,
+                TEST_CSV=TEST_CSV,
+
+
+                BATCH_SIZE=4,
+                VAL_BATCH_SIZE=4,
+                RUN_NAME="efficientnet-b3_JACC",
+                MODEL="efficientnet-b3",
+                BUILDING_JACCARD_WEIGHT=0.25,
+                BCE_LOSS_WEIGHT=0.75,
+                GPU=num-1,
+                )
+    
+    if num==3:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=VAL_EVERY_N_EPOCH,
+                NUM_EPOCHS=NUM_EPOCHS,
+                SAVE_DIR=SAVE_DIR,
+                IMG_SIZE=IMG_SIZE,
+                TRAIN_CROP=TRAIN_CROP,
+                VALIDATION_CROP=VALIDATION_CROP,
+                FINAL_EVAL_LOOP=FINAL_EVAL_LOOP,
+                MULTI_SAVE_PATH=MULTI_SAVE_PATH,
+                MULTI_TRAIN_SAVE_PATH=MULTI_TRAIN_SAVE_PATH,
+                MULTI_MODEL=MULTI_MODEL,
+                MULTI_MODEL_EVAL=MULTI_MODEL_EVAL,
+                TEST_CSV=TEST_CSV,
+
+
+                BATCH_SIZE=3,
+                VAL_BATCH_SIZE=4,
+                RUN_NAME="efficientnet-b4_X2",
+                MODEL="efficientnet-b4",
+                GPU=num-1,
+                )
+
+    if num==4:
+        config = FoundationConfig(
+                VAL_EVERY_N_EPOCH=VAL_EVERY_N_EPOCH,
+                NUM_EPOCHS=NUM_EPOCHS,
+                SAVE_DIR=SAVE_DIR,
+                IMG_SIZE=IMG_SIZE,
+                TRAIN_CROP=TRAIN_CROP,
+                VALIDATION_CROP=VALIDATION_CROP,
+                FINAL_EVAL_LOOP=FINAL_EVAL_LOOP,
+                MULTI_SAVE_PATH=MULTI_SAVE_PATH,
+                MULTI_TRAIN_SAVE_PATH=MULTI_TRAIN_SAVE_PATH,
+                MULTI_MODEL=MULTI_MODEL,
+                MULTI_MODEL_EVAL=MULTI_MODEL_EVAL,
+                TEST_CSV=TEST_CSV,
+
+
+                BATCH_SIZE=3,
+                VAL_BATCH_SIZE=4,
+                RUN_NAME="efficientnet-b4_X2_JACC",
+                MODEL="efficientnet-b4",
+                BUILDING_JACCARD_WEIGHT=0.25,
+                BCE_LOSS_WEIGHT=0.75,
+                GPU=num-1,
+                )
+                
+    return config
 
 
 def get_config1(num):
@@ -730,10 +854,19 @@ class FloodConfig:
     VALIDATION_LOOP_CSV : str = "areas_of_interest/sn8_data_val.csv"
 
     SAVE_CSV : str = "flood_debug/"
-    MODEL_NAME : str = "resnet34_siamese"
+
+    # MODEL_NAME : str = "resnet34"
+    # SIAMESE : bool = False
+    # MODEL_NAME = "resnet34_siamese"
+    # SIAMESE : bool = True
+    MODEL_NAME = "efficientnet-b3"
+    SIAMESE : bool = True
+    
+
+    PRETRAIN : bool = True
     LR : float = 1e-4
-    BATCH_SIZE : int = 4
-    N_EPOCHS : int = 30
+    BATCH_SIZE : int = 2
+    N_EPOCHS : int = 60
 
     IMG_SIZE : tuple = (2600, 2600)
 

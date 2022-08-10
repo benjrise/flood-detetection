@@ -6,6 +6,8 @@ import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.autograd import Variable
+
 
 from efficientnet_pytorch import EfficientNet
 from efficientnet_pytorch.utils import Conv2dStaticSamePadding
@@ -23,7 +25,12 @@ class ConvRelu(nn.Module):
 
 
 class EfficientNet_Unet(nn.Module):
-    def __init__(self, name='efficientnet-b0', pretrained=True, **kwargs):
+    def __init__(self, 
+                name='efficientnet-b0', 
+                pretrained=True, 
+                in_channels=3,
+                mode="foundation",
+                **kwargs):
         super(EfficientNet_Unet, self).__init__()
 
         enc_sizes = {
@@ -51,8 +58,12 @@ class EfficientNet_Unet(nn.Module):
         self.conv9_2 = ConvRelu(decoder_filters[-4] + encoder_filters[-5], decoder_filters[-4])
         self.conv10 = ConvRelu(decoder_filters[-4], decoder_filters[-5])
         
-        self.road_layer = nn.Conv2d(decoder_filters[-5], 8, 1, stride=1, padding=0)
-        self.building_layer = nn.Conv2d(decoder_filters[-5], 1, 1, stride=1, padding=0)
+        self.mode = mode
+        if self.mode == "foundation":
+            self.road_layer = nn.Conv2d(decoder_filters[-5], 8, 1, stride=1, padding=0)
+            self.building_layer = nn.Conv2d(decoder_filters[-5], 1, 1, stride=1, padding=0)
+        else:
+            self.flood_layer = self.make_final_classifier(decoder_filters[-5], num_classes=5)
 
         self._initialize_weights()
 
@@ -61,6 +72,17 @@ class EfficientNet_Unet(nn.Module):
         else:    
             self.encoder = EfficientNet.from_name(name)
 
+        if in_channels != 3:
+            weights = self.encoder._conv_stem.weight.clone()
+            out_channels = self.encoder._conv_stem.out_channels
+            # Need to set image size, doesn't make any difference here, but if production version needed probably need to change
+            # to correct image input size or to Conv2dDynamicSamePadding
+            new_in_layer = Conv2dStaticSamePadding(in_channels, out_channels, kernel_size=(3,3), stride=(2,2), bias=False, image_size=240)
+            new_in_layer.weight.data = nn.init.kaiming_normal_(new_in_layer.weight.data)
+            new_in_layer.weight[:, :3, :, :].data[...] = Variable(weights, requires_grad=True)
+            self.encoder._conv_stem = new_in_layer
+        elif in_channels < 3:
+            raise NotImplementedError
 
     def extract_features(self, inp):
         out = []
@@ -90,7 +112,6 @@ class EfficientNet_Unet(nn.Module):
 
         enc1, enc2, enc3, enc4, enc5 = self.extract_features(x)
 
-
         y_out, x_out = enc4.shape[2], enc4.shape[3]
         dec6 = self.conv6(F.interpolate(enc5, size=(y_out, x_out)))
         dec6 = self.conv6_2(torch.cat([dec6, enc4
@@ -114,10 +135,13 @@ class EfficientNet_Unet(nn.Module):
         
         dec10 = self.conv10(F.interpolate(dec9, scale_factor=2, ))
 
-        # TODO ADD EXTRA HEADS HERE
-        building = self.building_layer(dec10)
-        road = self.road_layer(dec10)
-        return building, road
+        if self.mode == "foundation":
+            building = self.building_layer(dec10)
+            road = self.road_layer(dec10)
+            return building, road
+        else:
+            flood = self.flood_layer(dec10)
+            return flood
 
 
     def _initialize_weights(self):
@@ -130,10 +154,21 @@ class EfficientNet_Unet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+    def make_final_classifier(self, in_filters, num_classes):
+        return nn.Sequential(
+            nn.Conv2d(in_filters, num_classes, 3, padding=1)
+        )
 
+    def make_final_classifier2(self, in_filters, num_classes):
+        return nn.Sequential(nn.Conv2d(in_filters, 32, 3, padding=1),
+                            nn.Conv2d(32, num_classes, 3, padding=1))
 
 class EfficientNet_Unet_Double(nn.Module):
-    def __init__(self, name='efficientnet-b0', pretrained=True, **kwargs):
+    def __init__(self, 
+                name='efficientnet-b0', 
+                pretrained=True, 
+                num_classes=5,
+                in_channels=3):
         super(EfficientNet_Unet_Double, self).__init__()
 
         enc_sizes = {
@@ -161,7 +196,7 @@ class EfficientNet_Unet_Double(nn.Module):
         self.conv9_2 = ConvRelu(decoder_filters[-4] + encoder_filters[-5], decoder_filters[-4])
         self.conv10 = ConvRelu(decoder_filters[-4], decoder_filters[-5])
         
-        self.res = nn.Conv2d(decoder_filters[-5] * 2, 7, 1, stride=1, padding=0)
+        self.res = nn.Conv2d(decoder_filters[-5] * 2, num_classes, 1, stride=1, padding=0)
 
         self._initialize_weights()
 
@@ -221,11 +256,10 @@ class EfficientNet_Unet_Double(nn.Module):
         return dec10
 
 
-    def forward(self, x):
-        batch_size, C, H, W = x.shape
+    def forward(self, preimg, postimg):
 
-        dec10_0 = self.forward1(x[:, :3, :, :])
-        dec10_1 = self.forward1(x[:, 3:, :, :])
+        dec10_0 = self.forward1(preimg)
+        dec10_1 = self.forward1(postimg)
 
         dec10 = torch.cat([dec10_0, dec10_1], 1)
 
@@ -243,7 +277,18 @@ class EfficientNet_Unet_Double(nn.Module):
                 m.bias.data.zero_()
 
 if __name__ == "__main__":
-    efficient_unet = EfficientNet_Unet("efficientnet-b7")
+    efficient = EfficientNet.from_name("efficientnet-b1")
+    #print(efficient)
+    # new_in_layer = Conv2dStaticSamePadding()
+    print(efficient._conv_stem)
+    weights = efficient._conv_stem.weight.clone()
+    new_in_layer = Conv2dStaticSamePadding(6, 32, kernel_size=(3,3), stride=(2,2), bias=False, image_size=240)
+    new_in_layer.weight.data = nn.init.kaiming_normal_(new_in_layer.weight.data)
+    new_in_layer.weight[:, :3, :, :].data[...] = Variable(weights, requires_grad=True)
+    # print(new_in_layer)
+
+
     x = torch.rand(1, 3, 512, 512)
-    x = efficient_unet(x)
-    print(x)
+    efficient._conv_stem = new_in_layer
+    print(efficient._conv_stem)
+    #sprint(x)

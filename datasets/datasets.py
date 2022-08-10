@@ -2,6 +2,7 @@ import csv
 import copy
 from typing import List, Tuple
 import cv2
+import os
 
 from osgeo import gdal
 import numpy as np
@@ -50,6 +51,8 @@ class SN8Dataset(Dataset):
             for row in reader:
                 in_data = copy.copy(dict_template)
                 for j in self.data_to_load:
+                    if j == "training_preds":
+                        continue
                     in_data[j]=row[j]
                 self.files.append(in_data)
         
@@ -156,100 +159,94 @@ class SN8Dataset(Dataset):
         return data
 
 
+class SN8FloodDataset(SN8Dataset):
+
+    def __init__(self, 
+                csv_filename: str, 
+                data_to_load: List[str] = ["preimg", "postimg", "building", "road", "roadspeed", "flood", "training_preds"],
+                img_size: Tuple[int, int] = (1300, 1300), 
+                transforms=None,
+                training_preds_dir=None):
+        
+        super().__init__(csv_filename, data_to_load, img_size, transforms)
+        self.all_data_types = ["preimg", 
+                                "postimg", 
+                                "building", 
+                                "road", 
+                                "roadspeed", 
+                                "flood", 
+                                "training_preds"]
+        if "training_preds" in data_to_load:
+            assert training_preds_dir is not None
+        self.training_preds_dir = training_preds_dir 
 
 
+    def __getitem__(self, index):
+        data_dict = self.files[index]
+        returned_data = {}
+        
+        for i in self.all_data_types:
+            if i == "training_preds":
+                if i not in self.data_to_load:
+                    returned_data[i] = None
+                    continue
+                
+                image_name = self.get_image_filename(index)
+                training_path = os.path.join(self.training_preds_dir, os.path.basename(image_name).replace(".tif", ".npy"))
+                with open(training_path, "rb") as f:
+                    training_prediction = np.load(f)
+                    training_prediction = np.concatenate(
+                        (training_prediction["building_prediction"], training_prediction["road_prediction"])
+                        , axis=0)
+                    returned_data[i] = training_prediction.transpose(1, 2, 0)
+                    continue
+            
+            filepath = data_dict[i]
+            if filepath:
+                # need to resample postimg to same spatial resolution/extent as preimg and labels.
+                if i == "postimg":
+                    ds = self.get_warped_ds(data_dict["postimg"])
+                else:
+                    ds = gdal.Open(filepath)
+                image = ds.ReadAsArray()
+                ds = None
+                if len(image.shape)==2: 
+                    image = np.expand_dims(image, axis=0)  
 
-# def calculate_slice_bboxes(
-#     image_height: int,
-#     image_width: int,
-#     slice_height: int = 512,
-#     slice_width: int = 512,
-#     overlap_height_ratio: float = 0.2,
-#     overlap_width_ratio: float = 0.2,
-# ):
-#     """
-#     Given the height and width of an image, calculates how to divide the image into
-#     overlapping slices according to the height and width provided. These slices are returned
-#     as bounding boxes in xyxy format.
-#     :param image_height: Height of the original image.
-#     :param image_width: Width of the original image.
-#     :param slice_height: Height of each slice
-#     :param slice_width: Width of each slice
-#     :param overlap_height_ratio: Fractional overlap in height of each slice (e.g. an overlap of 0.2 for a slice of size 100 yields an overlap of 20 pixels)
-#     :param overlap_width_ratio: Fractional overlap in width of each slice (e.g. an overlap of 0.2 for a slice of size 100 yields an overlap of 20 pixels)
-#     :return: a list of bounding boxes in xyxy format
-#     """
+                # up or down sample image, unless postimg, which is handelled by 
+                # get_warped_ds   
+                
+                # if self.img_size != (1300, 1300) and i != "postimg":
+                #     #image = resize(image, (self.img_size[0], self.img_size[1]))
+                #     image = cv2.resize(image, (1300, 1300))
+                
+                # C H W ->  H W C
+                image = image.transpose(1, 2, 0)
+                returned_data[i] = image
+            
+            else:
+                returned_data[i] = None
 
-#     slice_bboxes = []
-#     y_max = y_min = 0
-#     y_overlap = int(overlap_height_ratio * slice_height)
-#     x_overlap = int(overlap_width_ratio * slice_width)
-#     while y_max < image_height:
-#         x_min = x_max = 0
-#         y_max = y_min + slice_height
-#         while x_max < image_width:
-#             x_max = x_min + slice_width
-#             if y_max > image_height or x_max > image_width:
-#                 xmax = min(image_width, x_max)
-#                 ymax = min(image_height, y_max)
-#                 xmin = max(0, xmax - slice_width)
-#                 ymin = max(0, ymax - slice_height)
-#                 slice_bboxes.append([xmin, ymin, xmax, ymax])
-#             else:
-#                 slice_bboxes.append([x_min, y_min, x_max, y_max])
-#             x_min = x_max - x_overlap
-#         y_min = y_max - y_overlap
-#     return slice_bboxes
+        if self.transforms is not None:
+            returned_data = self._transform(returned_data)
+        
+        for key in self.all_data_types: 
+            if returned_data[key] is not None:
+                returned_data[key] = torch.from_numpy(returned_data[key]).float().permute(2,0,1)
+            else:
+                # Necessary as default collate_fn dosen't handle None
+                returned_data[key] = 0
 
-# # def get_patches(img_h, img_w, patch_h, patch_w):
-# #     num_y = -(img_h // -patch_h)
-# #     num_x = -(img_w // -patch_w)
-# #     for 
+        out = (returned_data["preimg"], 
+                returned_data["postimg"],
+                returned_data["building"],
+                returned_data["road"],
+                returned_data["roadspeed"],
+                returned_data["flood"],
+                returned_data["training_preds"])            
+        
+        return out
 
-
-# def return_batched_patches(image, 
-#                         patch_size, 
-#                         bs=4, 
-#                         overlap_height_ratio : float = 0.1, 
-#                         overlap_width_ratio: float = 0.1):
-
-#     image_h = image.shape[2]
-#     image_w = image.shape[3]
-#     patches = calculate_slice_bboxes(image_h, 
-#                             image_w, 
-#                             patch_size[0],
-#                             patch_size[1],
-#                             overlap_height_ratio,
-#                             0.1)
-
-
-
-#     patch_order = []
-#     image_slices = []
-#     # mask_slices = [[] for _ in range(len(masks))]
-#     for patch in patches:
-#         y, x = patch[0], patch[1]
-#         h = patch[2]-patch[0]
-#         w = patch[3]-patch[1]
-#         crop_slice = crop(image, y, x, h, w)
-#         # for idx, mask in enumerate(masks):
-#         #     mask_slices[idx].append(crop(mask, y, x, h, w))
-#         image_slices.append(crop_slice)
-#         patch_order.append(patch)
-
-#     image_batches = []
-#     # mask_batches = [[] for _ in range(len(masks))]
-#     for i in range(-(len(image_slices)//-bs)):
-#         start = i*bs
-#         end = i*bs+bs
-#         if end > len(image_slices):
-#             end = len(image_slices)
-#         img_sec = image_slices[start:end]
-#         image_batches.append(torch.cat(img_sec))
-#         # for idx, masks in enumerate(mask_slices):
-#         #     mask_batches[idx].append(torch.cat(masks[start:end]))
-
-#     return image_batches, patch_order
 
 
 if __name__ == "__main__":
@@ -258,12 +255,22 @@ if __name__ == "__main__":
     
     transforms = [RandomCrop(512, 512, always_apply=True), Normalize()]
 
-    train_dataset = SN8Dataset("areas_of_interest/sn8_data_train.csv",
-                            data_to_load=["preimg","postimg","flood", "road"], # ,"building", "road", "roadspeed", "flood"],
-                            img_size=(1300, 1300),
-                            transforms=transforms,
-                            )
+    # train_dataset = SN8Dataset("areas_of_interest/sn8_data_train.csv",
+    #                         data_to_load=["preimg","postimg","flood", "road"], # ,"building", "road", "roadspeed", "flood"],
+    #                         img_size=(1300, 1300),
+    #                         transforms=transforms,
+    #                         )
     
+
+    train_dataset = SN8FloodDataset("areas_of_interest/sn8_data_val.csv",
+                                data_to_load=["preimg",
+                                            "postimg",
+                                            "flood", 
+                                            "road"], 
+                                img_size=(1300, 1300),
+                                transforms=transforms,
+                                training_preds_dir="foundation_predictions/efficientnet-b3_JACC")
+
     print(train_dataset[30])
     
 

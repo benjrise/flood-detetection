@@ -1,4 +1,4 @@
-import csv
+ 
 import os
 import argparse
 from datetime import date, datetime
@@ -16,25 +16,24 @@ from core.losses import ComputeLoss, focal, jaccard_loss, soft_dice_loss
 import models.pytorch_zoo.unet as unet
 from models.other.unet import UNet
 from utils.utils import get_transforms
-from config import FoundationConfig, get_config
+from config import FoundationConfig, get_config, get_multi_config
 from models.hrnet.hrnet import HighResolutionNet, get_seg_model
 from models.hrnet.hr_config import get_hrnet_config
 from utils.utils import get_prediction_fig, plot_buildings
-
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",
                          type=int,)
+    parser.add_argument("-m",
+                        action="store_true",
+                        )
+    parser.add_argument("--slurm",
+                        action="store_true")
     args = parser.parse_args()
     return args
-    
-def write_metrics_epoch(epoch, fieldnames, train_metrics, val_metrics, training_log_csv):
-    epoch_dict = {"epoch":epoch}
-    merged_metrics = {**epoch_dict, **train_metrics, **val_metrics}
-    with open(training_log_csv, 'a', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writerow(merged_metrics)
 
 def log_to_tensorboard(writer, metrics, n_iter):
     for key, value in metrics.items():
@@ -58,12 +57,19 @@ models = {
 
 if __name__ == "__main__":
     
-    # TODO ADD DEBUG FLAG TO SAVE TO RANDOM DIRECTORY AND ONLY RUN A FEW SAMPLES
     args = parse_args()
+
     if args.config:
-        config = get_config(args.config)
+        if args.m:
+            config = get_multi_config(args.config)
+        else:
+            config = get_config(args.config)
+        if args.slurm:
+            #### FOR SLURM ARRAYS
+            config.GPU = 0
     else:
         config = FoundationConfig()
+    
     model_name = config.MODEL
     initial_lr = 1e-4
     batch_size = config.BATCH_SIZE
@@ -92,10 +98,10 @@ if __name__ == "__main__":
 
     # In case of multi-gpu can select differnt gpus by setting gpu = 0,1,2,3
     device = torch.device(f'cuda:{gpu}') 
-    # SEED=12
-    # torch.manual_seed(SEED)
+    SEED=12
+    torch.manual_seed(SEED)
     save_dir = config.SAVE_DIR
-    assert(os.path.exists(save_dir))
+    
     save_dir = os.path.join(save_dir, f"{run_name}_lr{'{:.2e}'.format(initial_lr)}_bs{batch_size}_{date_total}")
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -104,14 +110,6 @@ if __name__ == "__main__":
     best_model_path = os.path.join(save_dir, "best_model.pth")
     training_log_csv = os.path.join(save_dir, "log.csv")
 
-
-    # init the training log
-    # with open(training_log_csv, 'w', newline='') as csvfile:
-    #     fieldnames = ['epoch', 'lr', 'train_tot_loss', 'train_bce', 'train_dice', 'train_focal', 'train_road_loss',
-    #                                  'val_tot_loss', 'val_bce', 'val_dice', 'val_focal', 'val_road_loss']
-    #     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    #     writer.writeheader()
-    
     writer = SummaryWriter(save_dir)
     print(f"RUN: {run_name}")
     train_transforms, validation_transforms =\
@@ -142,13 +140,15 @@ if __name__ == "__main__":
         model_config = get_hrnet_config("models/hrnet/hr_config.yml")
         model = get_seg_model(model_config, pretrain=config.PRETRAIN)
     elif model_name[:13] == "efficientnet-":
-        model = EfficientNet_Unet(name=model_name, pretrained=config.PRETRAIN)
+        model = EfficientNet_Unet(name=model_name, 
+                                pretrained=config.PRETRAIN,
+                                mode="foundation")
     else:
         model = models[model_name](num_classes=[1, 8], num_channels=3)
     
     optimizer = config.get_optimizer(model)
-
     model.to(device)
+    
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
                             patience=config.PATIENCE, factor=config.FACTOR, 
                             eps=1e-7, verbose=True)
@@ -201,19 +201,6 @@ if __name__ == "__main__":
                 n_iter = epoch * len(train_dataloader) + i
                 writer.add_scalar("training_loss_step", loss, n_iter)
 
-                # if i == 0 and epoch % config.PLOT_EVERY == 0:
-                #         for idx, (image, pred_buildings, pred_roads, gt_buildings, gt_roads)in enumerate(zip(preimg, building_pred, y_pred, building, roadspeed)):
-                #             image = image.cpu()
-                #             pred_buildings = torch.sigmoid(pred_buildings).cpu().detach()
-                #             pred_roads = pred_roads.cpu().detach()
-                #             gt_buildings = gt_buildings.cpu().detach()
-                #             gt_roads = gt_roads.cpu().detach()
-                #             predictions = [pred_buildings, pred_roads]
-                #             gt = [gt_buildings, gt_roads]
-                #             # fig = get_prediction_fig(image, gt,  predictions)
-                #             fig = plot_buildings(gt_buildings, pred_buildings)
-                #             writer.add_figure(f"EPOCH {epoch} - TRAINING-ITERATION {idx}", fig, global_step=epoch)
-
         for key in train_metrics.keys():
             train_metrics[key] /= len(train_dataloader)
         
@@ -242,31 +229,15 @@ if __name__ == "__main__":
                                     val_metrics[key] = value
                                 else:
                                     val_metrics[key] += value
-                    
-                    # if i == 0 and epoch % config.PLOT_EVERY == 0:
-                    #     for idx, (image, pred_buildings, pred_roads, gt_buildings, gt_roads)in enumerate(zip(preimg, building_pred, road_pred, building, roadspeed)):
-                    #         image = image.cpu().numpy()
-                    #         pred_buildings = pred_buildings.cpu().numpy()
-                    #         pred_roads = pred_roads.cpu().numpy()
-                    #         gt_buildings = gt_buildings.cpu().numpy()
-                    #         gt_roads = gt_roads.cpu().numpy()
-                    #         predictions = [pred_buildings, pred_roads]
-                    #         gt = [gt_buildings, gt_roads]
-                    #         fig = get_prediction_fig(image, gt,  predictions)
-                    #         writer.add_figure(f"EPOCH {epoch} - ITERATION {idx}", fig, global_step=epoch)
-                    
+                                       
                     out_loss = val_metrics["valid_loss"]
                     print(f"    {str(np.round(i/len(val_dataloader)*100,2))}%: VAL LOSS: {(out_loss*1.0/(i+1))}", end="\r")
 
-
             for key in val_metrics.keys():
                 val_metrics[key] /= len(val_dataloader)
-
-            # write_metrics_epoch(epoch, fieldnames, train_metrics, val_metrics, training_log_csv)
-            print(val_metrics)
-            log_to_tensorboard(writer, val_metrics, epoch)
+            
             scheduler.step(val_metrics["valid_loss"])
-
+            log_to_tensorboard(writer, val_metrics, epoch)
             save_model_checkpoint(model, checkpoint_model_path)
 
             epoch_val_loss = val_metrics["valid_loss"]
@@ -275,6 +246,11 @@ if __name__ == "__main__":
                 best_loss = epoch_val_loss
                 save_model_checkpoint(model, best_model_path)
     
+    if config.MULTI_MODEL:
+        from foundation_eval import multi_model_eval_loop
+        multi_model_eval_loop(config, model, save_dir)
+
     if config.FINAL_EVAL_LOOP:
         from foundation_eval import foundation_final_eval_loop
         foundation_final_eval_loop(config, model, val_dataset, save_dir)
+    

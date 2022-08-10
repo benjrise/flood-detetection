@@ -16,8 +16,11 @@ import models.pytorch_zoo.unet as unet
 from models.other.unet import UNetSiamese
 from models.other.siamunetdif import SiamUnet_diff
 from models.other.siamnestedunet import SNUNet_ECAM
+from models.efficientnet.efficient_unet import EfficientNet_Unet, EfficientNet_Unet_Double
 from utils.utils import get_transforms
 from config import FloodConfig
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 def parse_args():
@@ -93,12 +96,14 @@ if __name__ ==  "__main__":
     batch_size = config.BATCH_SIZE
     n_epochs = config.N_EPOCHS
     gpu = config.GPU
+
+    print(model_name)
     
     now = datetime.now() 
     date_total = str(now.strftime("%d-%m-%Y-%H-%M"))
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
-
+    device = torch.device(f"cuda:{gpu}")
 
     soft_dice_loss_weight = 0.25
     focal_loss_weight = 0.75
@@ -131,7 +136,8 @@ if __name__ ==  "__main__":
         writer.writeheader()
     writer = SummaryWriter()
     
-    train_transforms, validation_transforms = get_transforms(crop=config.TRAIN_CROP)
+    train_transforms, validation_transforms = get_transforms(crop=config.TRAIN_CROP,
+                                                    center_crop=config.VALID_CROP)
     train_dataset = SN8Dataset(train_csv,
                             data_to_load=["preimg","postimg","flood"],
                             img_size=img_size,
@@ -144,12 +150,29 @@ if __name__ ==  "__main__":
     val_dataloader = torch.utils.data.DataLoader(val_dataset, num_workers=4, batch_size=batch_size)
 
     # model = models["resnet34"](num_classes=5, num_channels=6)
-    if model_name == "unet_siamese":
-        model = UNetSiamese(3, num_classes, bilinear=True)
+    if config.SIAMESE:
+        if model_name == "unet_siamese":
+            model = UNetSiamese(3, num_classes, bilinear=True)
+        elif model_name[:13] == "efficientnet-":
+            model = EfficientNet_Unet_Double(name=model_name,
+                                    pretrained=config.PRETRAIN, 
+                                    in_channels=3, 
+                                    num_classes=5,
+                                    )
+    
     else:
-        model = models[model_name](num_classes=num_classes, num_channels=3)
+        if model_name[:13] == "efficientnet-":
+            model = EfficientNet_Unet(name=model_name,
+                                    pretrained=config.PRETRAIN, 
+                                    in_channels=6, 
+                                    num_classes=5,
+                                    mode="flood")
+        else:
+            model = models[model_name](num_classes=num_classes, 
+                                        num_channels=6,
+                                        )
 
-    model.cuda()
+    model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
     scaler = torch.cuda.amp.GradScaler(enabled=config.MIXED_PRECISION)
@@ -176,21 +199,23 @@ if __name__ ==  "__main__":
 
             preimg, postimg, building, road, roadspeed, flood = data
 
-            preimg = preimg.cuda().float()
-            postimg = postimg.cuda().float()
-            # combinedimg = torch.cat((preimg, postimg), dim=1)
-            # combinedimg = combinedimg.cuda().float()
+            preimg = preimg.to(device).float()
+            postimg = postimg.to(device).float()
+            if not config.SIAMESE:
+                combinedimg = torch.cat((preimg, postimg), dim=1)
 
             flood = flood.numpy()
             flood_shape = flood.shape
             flood = np.append(np.zeros(shape=(flood_shape[0],1,flood_shape[2],flood_shape[3])), flood, axis=1)
             flood = np.argmax(flood, axis = 1) # this is needed for cross-entropy loss. 
 
-            flood = torch.tensor(flood).cuda()
+            flood = torch.tensor(flood).to(device)
             
             with torch.cuda.amp.autocast(enabled=config.MIXED_PRECISION):
-                # flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
-                flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
+                if not config.SIAMESE:
+                    flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
+                else:
+                    flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
 
                 #y_pred = F.sigmoid(flood_pred)
                 #focal_l = focal(y_pred, flood)
@@ -231,10 +256,10 @@ if __name__ ==  "__main__":
             for i, data in enumerate(val_dataloader):
                 preimg, postimg, building, road, roadspeed, flood = data
 
-                # combinedimg = torch.cat((preimg, postimg), dim=1)
-                # combinedimg = combinedimg.cuda().float()
-                preimg = preimg.cuda().float()
-                postimg = postimg.cuda().float()
+                preimg = preimg.to(device).float()
+                postimg = postimg.to(device).float()
+                if not config.SIAMESE:
+                    combinedimg = torch.cat((preimg, postimg), dim=1)
 
                 flood = flood.numpy()
                 flood_shape = flood.shape
@@ -247,12 +272,14 @@ if __name__ ==  "__main__":
                 #temp[:,5] = np.max(flood[:,2:], axis=1)
                 #flood = temp
 
-                flood = torch.tensor(flood).cuda()
+                flood = torch.tensor(flood).to(device)
 
                 with torch.cuda.amp.autocast(enabled=config.MIXED_PRECISION):
-
-                    # flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
-                    flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
+                    
+                    if not config.SIAMESE:
+                        flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
+                    else:
+                        flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
 
 
                     #y_pred = F.sigmoid(flood_pred)
