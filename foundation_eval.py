@@ -1,10 +1,10 @@
 import os
 import argparse
-from config import FoundationConfig
+from config_foundation import FoundationConfig, get_multi_config
 import csv
 from dataclasses import asdict
 from models.efficientnet.efficient_unet import EfficientNet_Unet
-
+import time
 
 from osgeo import gdal
 from osgeo import osr
@@ -17,7 +17,7 @@ import torch.nn as nn
 import models.pytorch_zoo.unet as unet
 from models.other.unet import UNet
 from datasets.datasets import SN8Dataset
-from utils.utils import get_transforms, write_geotiff
+from utils.utils import get_transforms, write_geotiff, check_dir_exists
 from models.hrnet.hrnet import HighResolutionNet, get_seg_model
 from models.hrnet.hr_config import get_hrnet_config
 from utils.validation_utils import validate_patches 
@@ -141,11 +141,12 @@ def multi_model_eval_loop(config : FoundationConfig,
     in_csv = config.TEST_CSV
     predictions_dir = config.MULTI_SAVE_PATH
     model_folder = config.RUN_NAME
-    
+
+    check_dir_exists(predictions_dir)
     prediction_path = os.path.join(predictions_dir, model_folder)
-    if not os.path.exists(prediction_path):
-        os.mkdir(prediction_path)
-        os.chmod(prediction_path, 0o777)
+    check_dir_exists(prediction_path)
+    ground_truth_path = config.GT_SAVE_DIR
+    check_dir_exists(ground_truth_path)       
 
     gpu = config.GPU
     img_size = config.IMG_SIZE
@@ -156,7 +157,7 @@ def multi_model_eval_loop(config : FoundationConfig,
                             img_size=config.IMG_SIZE,
                             transforms=valid_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1)
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=f'cuda:{gpu}'))
     device = torch.device(f'cuda:{gpu}' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
@@ -175,9 +176,9 @@ def multi_model_eval_loop(config : FoundationConfig,
                                                         overlap_height_ratio=0.2,
                                                         overlap_width_ratio=0.2)
             
-            
             building_prediction = building_pred.cpu().numpy()[0] # (C,H,W)
             road_prediction = roadspeed_pred.cpu().numpy()[0] # (C,H,W)
+           
 
             save_path = os.path.join(prediction_path, os.path.basename(current_image_filename.replace(".tif", ".npy")))
             with open(save_path, "wb") as f:
@@ -188,16 +189,16 @@ def multi_model_eval_loop(config : FoundationConfig,
             gt_roadspeed = roadspeed.cpu().numpy()[0] # index so we have (C,H,W)
             
             if config.MULTI_MODEL_EVAL:
-                gts = np.zeros((2, 8, img_size[0], img_size[1]))
-                gts[0,0] = gt_building
-                gts[1,:] = gt_roadspeed
-                with open(os.path.join("ground_truth", os.path.basename(current_image_filename.replace(".tif", ".npy"))), "wb") as f:
-                    np.save(f, gts)
-
+                with open(os.path.join(ground_truth_path, os.path.basename(current_image_filename.replace(".tif", ".npy"))), "wb") as f:
+                    np.savez(f, gt_building=gt_building, gt_roadspeed=gt_roadspeed)
+            
     
     if config.SAVE_TRAINING_PREDS:
-        
         out_dir = config.MULTI_TRAIN_SAVE_PATH
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
+            os.chmod(out_dir, 0o777)
+
         model_folder = config.RUN_NAME
         
         prediction_path = os.path.join(out_dir, model_folder)
@@ -227,9 +228,8 @@ def multi_model_eval_loop(config : FoundationConfig,
                                                     overlap_width_ratio=0.2)
                                                 
 
-                building_prediction = building_pred.cpu().numpy()[0] # (1,H,W) 
-                road_prediction = roadspeed_pred.cpu().numpy()[0][-1] #  (1,H,W)
-
+                building_prediction = building_pred.cpu().numpy() # (1,H,W) 
+                road_prediction = roadspeed_pred.cpu().numpy() #  (1,H,W)
                 save_path = os.path.join(prediction_path, os.path.basename(current_image_filename.replace(".tif", ".npy")))
                 with open(save_path, "wb") as f:
                     np.savez(f, building_prediction=building_prediction, 
@@ -270,8 +270,8 @@ def foundation_final_eval_loop(config : FoundationConfig,
                             transforms=valid_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1)
     
-    model.load_state_dict(torch.load(model_path))
     device = torch.device(f'cuda:{gpu}' if torch.cuda.is_available() else 'cpu')
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
 
     predictions = np.zeros((2, 8, img_size[0], img_size[1]))
@@ -440,22 +440,29 @@ if __name__ == "__main__":
     # model_config = get_hrnet_config("models/hrnet/hr_config.yml")
     # model = get_seg_model(model_config, pretrain=True)
 
-    model = EfficientNet_Unet(name="efficientnet-b3", pretrained=False)
     
-    config = FoundationConfig(IMG_SIZE=(2600, 2600), SAVE_PRED=True, SAVE_FIG=True)
+    # config = FoundationConfig(IMG_SIZE=(2600, 2600), SAVE_PRED=True, SAVE_FIG=True)
+    config = FoundationConfig(SAVE_FIG=False, SAVE_PRED=False)
     _, validation_transforms = get_transforms()
-    # val_dataset = SN8Dataset(config.VAL_CSV,
-    #                         data_to_load=["preimg","building","roadspeed"],
-    #                         img_size=(2600, 2600),
-    #                         transforms=validation_transforms)
+    val_dataset = SN8Dataset(config.VAL_CSV,
+                            data_to_load=["preimg","building","roadspeed"],
+                            img_size=(2600, 2600),
+                            transforms=validation_transforms)
 
     # path = "upsample_experiments/HRENT_UPSAMPLEX2_JAC_lr1.00e-04_bs8_01-08-2022-19-55/"
     # path = "upsample_experiments/HRENT_UPSAMPLEX2_lr1.00e-04_bs8_02-08-2022-23-57/"
-    path = "upsample_experiments2/efficientnet-b3_X2_lr1.00e-04_bs4_06-08-2022-19-13/"
-    # path = "upsample_experiments2/efficientnet-b3_X2_JACC_lr1.00e-04_bs4_07-08-2022-07-45/"
-    
-    multi_model_eval_loop(config, model, path)
+    # path = "upsample_experiments2/efficientnet-b3_X2_lr1.00e-04_bs4_06-08-2022-19-13/"
+    # # path = "upsample_experiments2/efficientnet-b3_X2_JACC_lr1.00e-04_bs4_07-08-2022-07-45/"
+    # config = get_multi_config(1)
+    # model = EfficientNet_Unet(name="efficientnet-b3", pretrained=False)
+    # path = "foundation_save/efficientnet-b3_X2_lr1.00e-04_bs4_10-08-2022-12-05"
+    # multi_model_eval_loop(config, model, path)
 
+    model = EfficientNet_Unet(name="efficientnet-b4", pretrained=False)
+    path = "foundation_preds/foundation_save/efficientnet-b4_1_lr1.00e-04_bs3_13-08-2022-15-18/"
+     
+    path = "foundation_preds/foundation_save/efficientnet-b4_1_lr1.00e-04_bs3_13-08-2022-18-33/"    
+    foundation_final_eval_loop(config, model, val_dataset, path)
 
     # model_path = args.model_path
     # in_csv = args.in_csv

@@ -1,4 +1,11 @@
-TRAIN_CSV="areas_of_interest/sn8_data_train.csv"
-VAL_CSV="areas_of_interest/sn8_data_val.csv"
-MODEL_NAME="seresnet50"
-python train_flood.py --train_csv $TRAIN_CSV --val_csv $VAL_CSV --save_dir flood/ --model_name $MODEL_NAME --lr 0.0001 --batch_size 2 --n_epochs 50 --gpu 0
+python train_flood.py -m --config 1 &
+python train_flood.py -m --config 2 &
+python train_flood.py -m --config 3 &
+python train_flood.py -m --config 4 
+
+wait
+
+predictions_dir="flood_preds/flood_validation_preds"
+gt_dir="flood_preds/ground_truth_flood"
+out_dir="flood_preds/flood_out"
+python ensemble_flood.py --predictions_dir $predictions_dir --ground_truth_dir $gt_dir --out_dir $out_dir

@@ -3,7 +3,7 @@ import os
 import argparse
 import datetime
 from datetime import datetime
-from flood_eval import flood_final_eval_loop
+from flood_eval import flood_final_eval_loop, multi_model_eval_loop
 
 import torch
 import torch.nn as nn
@@ -11,45 +11,24 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
 
-from datasets.datasets import SN8Dataset
+from datasets.datasets import SN8Dataset, SN8FloodDataset
 import models.pytorch_zoo.unet as unet
 from models.other.unet import UNetSiamese
 from models.other.siamunetdif import SiamUnet_diff
 from models.other.siamnestedunet import SNUNet_ECAM
 from models.efficientnet.efficient_unet import EfficientNet_Unet, EfficientNet_Unet_Double
 from utils.utils import get_transforms
-from config import FloodConfig
+from config_flood import FloodConfig, get_multi_flood_config
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--train_csv",
-                        type=str,
-                        required=True)
-    parser.add_argument("--val_csv",
-                         type=str,
-                         required=True)
-    parser.add_argument("--save_dir",
-                         type=str,
-                         required=True)
-    parser.add_argument("--model_name",
-                         type=str,
-                         required=True)
-    parser.add_argument("--lr",
-                         type=float,
-                        default=0.0001)
-    parser.add_argument("--batch_size",
-                         type=int,
-                        default=2)
-    parser.add_argument("--n_epochs",
-                         type=int,
-                         default=50)
-    parser.add_argument("--gpu",
-                        type=int,
-                        default=0)
-    
+    parser.add_argument("--config",
+                        type=int)
+    parser.add_argument("-m",
+                        action="store_true")
     args = parser.parse_args()
     return args
 
@@ -86,16 +65,24 @@ models = {
 }
 
 if __name__ ==  "__main__":
-    # args = parse_args()
-    config = FloodConfig()
+    
+    args = parse_args()
+    if args.config:
+        if args.m:
+            config = get_multi_flood_config(args.config)
+        else:
+            config = FloodConfig()
+    else:
+        config = FloodConfig()
     train_csv = config.TRAIN_CSV
     val_csv = config.VAL_CSV
-    save_dir = config.SAVE_CSV
+    save_dir = config.SAVE_DIR
     model_name = config.MODEL_NAME
     initial_lr = config.LR
     batch_size = config.BATCH_SIZE
-    n_epochs = config.N_EPOCHS
+    n_epochs = config.NUM_EPOCHS
     gpu = config.GPU
+    print(n_epochs)
 
     print(model_name)
     
@@ -118,8 +105,11 @@ if __name__ ==  "__main__":
     SEED=12
     torch.manual_seed(SEED)
     
-    assert(os.path.exists(save_dir))
-    save_dir = os.path.join(save_dir, f"{model_name}_lr{'{:.2e}'.format(initial_lr)}_bs{batch_size}_{date_total}")
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+        os.chmod(save_dir, 0o777)
+
+    save_dir = os.path.join(save_dir, f"{config.RUN_NAME}_lr{'{:.2e}'.format(initial_lr)}_bs{batch_size}_{date_total}")
 
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -137,16 +127,33 @@ if __name__ ==  "__main__":
     writer = SummaryWriter()
     
     train_transforms, validation_transforms = get_transforms(crop=config.TRAIN_CROP,
-                                                    center_crop=config.VALID_CROP)
-    train_dataset = SN8Dataset(train_csv,
-                            data_to_load=["preimg","postimg","flood"],
-                            img_size=img_size,
-                            transforms=train_transforms)
+                                                    center_crop=config.VALIDATION_CROP)
+    
+    if config.USE_FOUNDATION_PREDS:
+        train_dataset = SN8FloodDataset(train_csv,
+                                data_to_load=["preimg",
+                                "postimg","flood", "training_preds"],
+                                img_size=img_size,
+                                transforms=train_transforms,
+                                training_preds_dir="foundation_pres_hold/training_preds")
+        val_dataset = SN8FloodDataset(val_csv,
+                                data_to_load=["preimg","postimg","flood","training_preds"],
+                                img_size=img_size,
+                                transforms=train_transforms,
+                                training_preds_dir="foundation_pres_hold/foundation_out")
+    else:
+
+        train_dataset = SN8Dataset(train_csv,
+                                data_to_load=["preimg","postimg","flood"],
+                                img_size=img_size,
+                                transforms=train_transforms,
+                                )
+        val_dataset = SN8Dataset(val_csv,
+                                data_to_load=["preimg","postimg","flood"],
+                                img_size=img_size,
+                                transforms=validation_transforms)
+
     train_dataloader = torch.utils.data.DataLoader(train_dataset, shuffle=True, num_workers=4, batch_size=batch_size)
-    val_dataset = SN8Dataset(val_csv,
-                            data_to_load=["preimg","postimg","flood"],
-                            img_size=img_size,
-                            transforms=validation_transforms)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, num_workers=4, batch_size=batch_size)
 
     # model = models["resnet34"](num_classes=5, num_channels=6)
@@ -197,10 +204,15 @@ if __name__ ==  "__main__":
         for i, data in enumerate(train_dataloader):
             optimizer.zero_grad()
 
-            preimg, postimg, building, road, roadspeed, flood = data
+            if config.USE_FOUNDATION_PREDS:
+                preimg, postimg, building, road, roadspeed, flood, foundation = data
+                foundation = foundation.to(device).float()
+            else:
+                preimg, postimg, building, road, roadspeed, flood = data
 
             preimg = preimg.to(device).float()
             postimg = postimg.to(device).float()
+
             if not config.SIAMESE:
                 combinedimg = torch.cat((preimg, postimg), dim=1)
 
@@ -212,11 +224,17 @@ if __name__ ==  "__main__":
             flood = torch.tensor(flood).to(device)
             
             with torch.cuda.amp.autocast(enabled=config.MIXED_PRECISION):
-                if not config.SIAMESE:
-                    flood_pred = model(combinedimg) # this is for resnet34 with stacked preimg+postimg input
+                
+                if not config.SIAMESE and not config.USE_FOUNDATION_PREDS:
+                    flood_pred = model(combinedimg) 
+                elif not config.SIAMESE and config.USE_FOUNDATION_PREDS:
+                    flood_pred = model(combinedimg)
+                elif config.SIAMESE and not config.USE_FOUNDATION_PREDS:
+                    flood_pred = model(preimg, postimg) 
                 else:
-                    flood_pred = model(preimg, postimg) # this is for siamese resnet34 with stacked preimg+postimg input
-
+                    print(foundation.shape)
+                    flood_pred = model(preimg, postimg, foundation)
+                
                 #y_pred = F.sigmoid(flood_pred)
                 #focal_l = focal(y_pred, flood)
                 #dice_soft_l = soft_dice_loss(y_pred, flood)
@@ -313,4 +331,8 @@ if __name__ ==  "__main__":
             best_loss = epoch_val_loss
             save_best_model(model, best_model_path)
 
-    flood_final_eval_loop(config, model, val_dataset, save_dir)
+    if config.FINAL_EVAL_LOOP:
+        flood_final_eval_loop(config, model, val_dataset, save_dir)
+    
+    if config.MULTI_MODEL:
+        multi_model_eval_loop(config, model, save_dir)

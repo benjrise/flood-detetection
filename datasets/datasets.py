@@ -160,7 +160,6 @@ class SN8Dataset(Dataset):
 
 
 class SN8FloodDataset(SN8Dataset):
-
     def __init__(self, 
                 csv_filename: str, 
                 data_to_load: List[str] = ["preimg", "postimg", "building", "road", "roadspeed", "flood", "training_preds"],
@@ -195,8 +194,10 @@ class SN8FloodDataset(SN8Dataset):
                 training_path = os.path.join(self.training_preds_dir, os.path.basename(image_name).replace(".tif", ".npy"))
                 with open(training_path, "rb") as f:
                     training_prediction = np.load(f)
+                    print(training_prediction["building_prediction"].shape)
+                    print(training_prediction["roadspeed_prediction"].shape)
                     training_prediction = np.concatenate(
-                        (training_prediction["building_prediction"], training_prediction["road_prediction"])
+                        (training_prediction["building_prediction"], training_prediction["roadspeed_prediction"])
                         , axis=0)
                     returned_data[i] = training_prediction.transpose(1, 2, 0)
                     continue

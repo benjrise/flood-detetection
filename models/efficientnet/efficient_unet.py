@@ -256,12 +256,15 @@ class EfficientNet_Unet_Double(nn.Module):
         return dec10
 
 
-    def forward(self, preimg, postimg):
+    def forward(self, preimg, postimg, foundation=None):
 
         dec10_0 = self.forward1(preimg)
         dec10_1 = self.forward1(postimg)
 
-        dec10 = torch.cat([dec10_0, dec10_1], 1)
+        if foundation is not None:
+            dec10 = torch.cat([dec10_0, dec10_1, foundation], 1)
+        else:
+            dec10 = torch.cat([dec10_0, dec10_1], 1)
 
         return self.res(dec10)
 

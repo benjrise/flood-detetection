@@ -16,10 +16,10 @@ from core.losses import ComputeLoss, focal, jaccard_loss, soft_dice_loss
 import models.pytorch_zoo.unet as unet
 from models.other.unet import UNet
 from utils.utils import get_transforms
-from config import FoundationConfig, get_config, get_multi_config
+from config_foundation import FoundationConfig, get_config, get_multi_config
 from models.hrnet.hrnet import HighResolutionNet, get_seg_model
 from models.hrnet.hr_config import get_hrnet_config
-from utils.utils import get_prediction_fig, plot_buildings
+from utils.utils import get_prediction_fig, plot_buildings, check_dir_exists
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -98,14 +98,15 @@ if __name__ == "__main__":
 
     # In case of multi-gpu can select differnt gpus by setting gpu = 0,1,2,3
     device = torch.device(f'cuda:{gpu}') 
-    SEED=12
-    torch.manual_seed(SEED)
+    # SEED=12
+    # torch.manual_seed(SEED)
+
     save_dir = config.SAVE_DIR
-    
+    check_dir_exists(save_dir)
+
     save_dir = os.path.join(save_dir, f"{run_name}_lr{'{:.2e}'.format(initial_lr)}_bs{batch_size}_{date_total}")
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
-        os.chmod(save_dir, 0o777)
+    check_dir_exists(save_dir)
+    
     checkpoint_model_path = os.path.join(save_dir, "model_checkpoint.pth")
     best_model_path = os.path.join(save_dir, "best_model.pth")
     training_log_csv = os.path.join(save_dir, "log.csv")
@@ -119,13 +120,17 @@ if __name__ == "__main__":
                         center_crop=config.VALIDATION_CROP)
     
     train_dataset = SN8Dataset(config.TRAIN_CSV,
-                            data_to_load=["preimg","building","roadspeed"],
-                            img_size=img_size,
-                            transforms=train_transforms)
+                                data_to_load=["preimg","building","roadspeed"],
+                                img_size=img_size,
+                                transforms=train_transforms)
+    if config.BAGGING:
+        indexes = np.random.choice(range(len(train_dataset)), int(len(train_dataset)*0.9))
+        train_dataset = torch.utils.data.Subset(train_dataset, indexes)
+
     train_dataloader = torch.utils.data.DataLoader(train_dataset,
-             shuffle=True, num_workers=4, 
-             batch_size=batch_size,
-             )
+            shuffle=True, num_workers=4, 
+            batch_size=batch_size,
+            )
     val_dataset = SN8Dataset(config.VAL_CSV,
                             data_to_load=["preimg","building","roadspeed"],
                             img_size=img_size,

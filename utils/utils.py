@@ -12,6 +12,7 @@ from albumentations import (Compose,
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
+import os
 
 def write_geotiff(output_tif, ncols, nrows,
                   xmin, xres,ymax, yres,
@@ -120,3 +121,18 @@ def plot_buildings(gt_buildings, prediction_buildings):
     axs[0].imshow(gt_buildings.permute(1,2,0))
     axs[1].imshow(prediction_buildings.permute(1,2,0))
     return fig
+
+def check_dir_exists(dir):
+    """
+    Checks if path to dir exists, if not creates the dir
+    """
+    if not os.path.exists(dir):
+        try:
+            os.mkdir(dir)
+            os.chmod(dir, 0o777)
+            print(f"Directory: {dir} created.")
+            return
+        except:
+            pass
+    print(f"Directory: {dir} exists.")
+    return

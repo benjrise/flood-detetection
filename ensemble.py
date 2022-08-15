@@ -1,22 +1,29 @@
 """
 Loosley based on Selim_sef spacenet 6
 """
-from multiprocessing.pool import Pool
-import os
-import csv
-from traceback import print_tb
-import numpy as np
-from tqdm import tqdm
-from osgeo import gdal
-from osgeo import osr
-from utils.utils import write_geotiff
-import torch
 import argparse
+import csv
+import os
+from multiprocessing.pool import Pool
+import itertools
 
+import numpy as np
+import torch
+from osgeo import gdal, osr
+from tqdm import tqdm
+
+from skimage import measure
+from skimage.segmentation import watershed
+from skimage.feature import peak_local_max
+from scipy import ndimage as ndi
+
+from utils.utils import check_dir_exists, write_geotiff
+import matplotlib.pyplot as plt
 
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
+
 
 
 def parse_args():
@@ -35,6 +42,18 @@ def parse_args():
     parser.add_argument("--train_out")
     args = parser.parse_args()
     return args
+
+def watershed_mod(mask, thresh_h=0.6, thresh_l=0.4, distance=5, conn=2, watershed_line=True):
+    mask0 = mask > thresh_h
+    local_maxi = peak_local_max(mask, indices=False, footprint=np.ones((distance*2+1, distance*2+1)),
+                            labels=(mask>thresh_l))
+    local_maxi[mask0] = True
+    seed_msk = ndi.label(local_maxi)[0]
+
+    mask = watershed(-mask, seed_msk, mask=(mask > thresh_l), watershed_line=watershed_line)
+    mask = measure.label(mask, connectivity=conn, background=0).astype('uint8')   
+    mask[mask>0] = 1
+    return mask
 
 def average_strategy(images):
     return np.average(images, axis=0)
@@ -58,12 +77,19 @@ def ensemble_image(args_list):
             building_predictions.append(in_prediction["building_prediction"])
             road_predictions.append(in_prediction["road_prediction"])
             current_image_filename = str(in_prediction["tif_path"])
-    
+
     if gt_dir is not None:
         with open(os.path.join(gt_dir, image), "rb") as f:
             gts = np.load(f)
-            # gt_building = gts[0,0]
-            # gt_roadspeed = gts[1,:]
+            gt_building = gts["gt_building"]
+            gt_roadspeed = gts["gt_roadspeed"]
+        
+       
+
+    gts = np.zeros((2, 8, gt_building.shape[-2], gt_building.shape[-1]))
+    gts[0,0] = gt_building
+    gts[1,:] = gt_roadspeed
+    
 
     road_predictions = np.array(road_predictions)
     road_prediction = average_strategy(road_predictions)
@@ -73,17 +99,17 @@ def ensemble_image(args_list):
     building_prediction = torch.sigmoid(torch.from_numpy(building_prediction)).numpy()[0]
     road_prediction = torch.sigmoid(torch.from_numpy(road_prediction)).numpy()
 
+
+    
+    building_prediction = watershed_mod(building_prediction, 
+                    thresh_l=0.4, thresh_h=0.6)
     building_prediction = np.rint(building_prediction).astype(int)
     roadspeed_prediction = np.rint(road_prediction).astype(int)
-
-    with open("foundation_save/building_road_predictions.npy", "wb") as f:
-        np.savez(f, building_prediction=building_prediction, 
-                    roadspeed_prediction=roadspeed_prediction[-1])
 
     predictions = np.zeros((2, 8, building_prediction.shape[0], building_prediction.shape[1]))
     predictions[0,0] = building_prediction
     predictions[1,:] = roadspeed_prediction
-            
+
     if save_preds_dir is not None:
         # road_pred_arr = (road_prediction * 255).astype(np.uint8) # to be compatible with the SN5 eval and road speed prediction, need to mult by 255
         road_pred_arr = (roadspeed_prediction * 255).astype(np.uint8)
@@ -105,7 +131,8 @@ def ensemble_image(args_list):
         write_geotiff(output_tif, ncols, nrows,
                     xmin, xres, ymax, yres,
                     raster_srs, building_pred_arr)
-        
+    
+
 
     metrics = [[], []]
     for j in range(len(gts)): # iterate through the building and road gt
@@ -128,18 +155,11 @@ def ensemble_image(args_list):
         metrics[j].append(tp)
         metrics[j].append(fp)
         metrics[j].append(fn)
-
-    # if save_fig_dir is not None:
-        #if save_preds_dir is not None: # for some reason, seg fault when doing both of these. maybe file saving or something is interfering. so sleep for a little
-        #    time.sleep(2) 
-        # save_figure_filename = os.path.join("predictions/", os.path.basename(current_image_filename)[:-4]+"_pred.png")
-        # make_prediction_png_roads_buildings(preimg, gts, predictions, save_figure_filename)
-
+    
     return  metrics  
 
 def ensemble_train_image(args_list):
     image, dirs, out_dir = args_list
-    save_preds_dir = out_dir
     building_predictions = []
     road_predictions = []
     current_image_filename = ''
@@ -172,15 +192,18 @@ def ensemble_train_image(args_list):
 
 
 if __name__ == "__main__":
-
+    
     args = parse_args()
     predictions_dir = args.predictions_dir
     gt_dir = args.ground_truth_dir
     out_dir = args.out_dir
-    
+
+    check_dir_exists(out_dir)
+
     dirs = [os.path.join(predictions_dir, d) for d in os.listdir(predictions_dir)]
     n_threads = 16
     images = os.listdir(dirs[0])
+    
     args_list = []
     for image in images:
         args_list.append((image, dirs, out_dir, gt_dir))
@@ -220,19 +243,25 @@ if __name__ == "__main__":
         print("f1: ", f1)
         print("iou: ", iou)
         print()
-    
-    final_out_csv = os.path.join(out_dir, "final_out.csv")
-    fields = ["data_type", "precision", "recall", "f1", "iou"]
-    with open(final_out_csv, "w", newline='') as f:
-        w = csv.DictWriter(f, fields)
-        w.writeheader()
-        for k in out:
-            w.writerow({field: out[k].get(field) or k for field in fields})
-    
+       
+        final_out_csv = os.path.join(args.out_dir, f"final_out.csv")
+        fields = ["data_type", 
+                "precision", 
+                "recall", 
+                "f1", 
+                "iou",]
+        with open(final_out_csv, "w", newline='') as f:
+            w = csv.DictWriter(f, fields)
+            w.writeheader()
+            for k in out:
+                w.writerow({field: out[k].get(field) or k for field in fields})
+           
+
     if args.train_predictions_dir:
+        out_dir = args.train_out
+        check_dir_exists(out_dir)
         dirs = [os.path.join(args.train_predictions_dir, d) for d in os.listdir(args.train_predictions_dir)]
         n_threads = 16
-        out_dir = args.train_out
         args_list = []
         images = os.listdir(dirs[0])
 

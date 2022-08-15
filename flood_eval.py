@@ -4,7 +4,7 @@ import argparse
 import csv
 
 from dataclasses import asdict
-from config import FloodConfig
+from config_flood import FloodConfig
 from osgeo import gdal
 from osgeo import osr
 import numpy as np
@@ -16,7 +16,7 @@ import torch.nn as nn
 import models.pytorch_zoo.unet as unet
 from datasets.datasets import SN8Dataset
 from models.other.unet import UNetSiamese
-from utils.utils import get_transforms, write_geotiff
+from utils.utils import check_dir_exists, get_transforms, write_geotiff
 from utils.validation_utils import validate_flood_patches
 
 def parse_args():
@@ -109,6 +109,84 @@ models = {
     'unet_siamese': UNetSiamese
 }
 
+# def multi_model_eval_loop(config : FloodConfig,
+# )
+
+def multi_model_eval_loop(config : FloodConfig, 
+                        model, 
+                        save_dir):
+
+    model_path = os.path.join(save_dir, "best_model.pth")
+    in_csv = config.VALIDATION_LOOP_CSV
+
+    check_dir_exists(config.MULTI_SAVE_PATH)
+    eval_save = os.path.join(config.MULTI_SAVE_PATH, config.RUN_NAME)
+    check_dir_exists(eval_save)
+    if config.GT_SAVE:
+        check_dir_exists(config.GT_SAVE_PATH)
+
+    num_classes = 5
+    img_size = config.IMG_SIZE
+    gpu = config.GPU
+    device = torch.device(f"cuda:{gpu}")
+    # os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
+
+    _, valid_transforms = get_transforms()
+    val_dataset = SN8Dataset(in_csv,
+                            data_to_load=["preimg","postimg","flood"],
+                            img_size=img_size,
+                            transforms=valid_transforms)
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1)
+
+    model.load_state_dict(torch.load(model_path))
+    model.eval()
+    device = torch.device(f"cuda:{gpu}")
+
+    val_loss_val = 0
+    with torch.no_grad():
+        for i, data in enumerate(val_dataloader):
+            
+            current_image_filename = val_dataset.get_image_filename(i)
+            print("evaluating: ", i, os.path.basename(current_image_filename))
+            preimg, postimg, building, road, roadspeed, flood = data
+
+            # preimg = preimg.to(device).float() #siamese
+            # postimg = postimg.to(device).float() #siamese
+            
+            flood = flood.numpy()
+            
+            flood_shape = flood.shape
+            flood = np.append(np.zeros(shape=(flood_shape[0],1,flood_shape[2],flood_shape[3])), flood, axis=1)
+            flood = np.argmax(flood, axis = 1)
+            flood = torch.tensor(flood)
+            
+            with torch.cuda.amp.autocast():
+                flood_pred = validate_flood_patches(preimg, postimg,
+                                                model, device, patch_size=(1024, 1024),
+                                                bs=1, overlap_height_ratio=0.2,
+                                                overlap_width_ratio=0.2)
+            
+            flood_pred = flood_pred.cpu().numpy()
+            gt_flood = flood.cpu().numpy()[0] 
+
+            # FLOOD PRED
+            save_path = os.path.join(eval_save, os.path.basename(current_image_filename.replace(".tif", ".npy")))
+            with open(save_path, "wb") as f:
+                np.savez(f, 
+                flood_prediction=flood_pred,
+                tif_path=current_image_filename)
+
+            if config.GT_SAVE:
+                save_path = os.path.join(config.GT_SAVE_PATH, 
+                                        os.path.basename(current_image_filename.replace(".tif", ".npy")))
+                with open(save_path, "wb") as f:
+                    np.save(f, gt_flood)
+
+
+
+
+
+
 def flood_final_eval_loop(config : FloodConfig, 
                         model, 
                         val_dataset,
@@ -144,7 +222,7 @@ def flood_final_eval_loop(config : FloodConfig,
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1)
 
     model.load_state_dict(torch.load(model_path))
-    model.cuda()
+    model.to(device)
 
     #criterion = nn.BCEWithLogitsLoss()
 
@@ -175,15 +253,15 @@ def flood_final_eval_loop(config : FloodConfig,
             print("evaluating: ", i, os.path.basename(current_image_filename))
             preimg, postimg, building, road, roadspeed, flood = data
 
-            # preimg = preimg.cuda().float() #siamese
-            # postimg = postimg.cuda().float() #siamese
+            # preimg = preimg.to(device).float() #siamese
+            # postimg = postimg.to(device).float() #siamese
             
             flood = flood.numpy()
             
             flood_shape = flood.shape
             flood = np.append(np.zeros(shape=(flood_shape[0],1,flood_shape[2],flood_shape[3])), flood, axis=1)
             flood = np.argmax(flood, axis = 1)
-            flood = torch.tensor(flood).cuda()
+            flood = torch.tensor(flood).to(device)
             
             with torch.cuda.amp.autocast():
                 flood_pred = validate_flood_patches(preimg, postimg,
@@ -340,7 +418,7 @@ if __name__ == "__main__":
         model = models[model_name](num_classes=num_classes, num_channels=3)
 
     model.load_state_dict(torch.load(model_path))
-    model.cuda()
+    model.to(device)
 
     #criterion = nn.BCEWithLogitsLoss()
 
@@ -370,15 +448,15 @@ if __name__ == "__main__":
             print("evaluating: ", i, os.path.basename(current_image_filename))
             preimg, postimg, building, road, roadspeed, flood = data
 
-            preimg = preimg.cuda().float() #siamese
-            postimg = postimg.cuda().float() #siamese
+            preimg = preimg.to(device).float() #siamese
+            postimg = postimg.to(device).float() #siamese
             
             flood = flood.numpy()
             flood_shape = flood.shape
             flood = np.append(np.zeros(shape=(flood_shape[0],1,flood_shape[2],flood_shape[3])), flood, axis=1)
             flood = np.argmax(flood, axis = 1)
             
-            flood = torch.tensor(flood).cuda()
+            flood = torch.tensor(flood).to(device)
 
             flood_pred = model(preimg, postimg) # siamese resnet34 with stacked preimg+postimg input
             flood_pred = torch.nn.functional.softmax(flood_pred, dim=1).cpu().numpy()[0] # (5, H, W)
