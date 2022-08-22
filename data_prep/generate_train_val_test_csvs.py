@@ -10,6 +10,7 @@ output csvs have the following columns: preimg, postimg, flood, building, road, 
     flood column contains the filepaths to the flood labels (.tif)
 """
 
+from email.mime import base
 import glob
 import os
 import math
@@ -68,7 +69,13 @@ def make_train_val_csvs(image_dirs,
         roadspeed = glob.glob(os.path.join(d, "annotations", "masks", "roadspeed*.tif"))
         pre = glob.glob(os.path.join(d, "PRE-event", "*.tif"))
         post = glob.glob(os.path.join(d, "POST-event", "*.tif"))
-        an, bu, ro, fl, rs, preims, postims = match_im_label(anno, bldgs, roads, flood, roadspeed, pre, post)
+        #
+        if len(anno) == 0:
+            # This is for test images
+            an, bu, ro, fl, rs, = [], [], [], [], []
+            preims, postims = match_im_label_test(pre, post)
+        else:
+            an, bu, ro, fl, rs, preims, postims = match_im_label(anno, bldgs, roads, flood, roadspeed, pre, post)
 
         geojsons.extend(an)
         build_labels.extend(bu)
@@ -87,6 +94,16 @@ def make_train_val_csvs(image_dirs,
         all_masks[1].append(build_labels[i])
         all_masks[2].append(road_labels[i])
         all_masks[3].append(speed_labels[i])
+
+    if not len(geojsons):
+        for i in range(len(pre_images)):
+            # For test data
+            all_images[0].append(pre_images[i])
+            all_images[1].append(post_images[i])
+            # all_masks[0].append(None)
+            # all_masks[1].append(None)
+            # all_masks[2].append(None)
+            # all_masks[3].append(None)
 
     idxs = np.arange(0, len(all_images[0]))
     np.random.shuffle(idxs)
@@ -132,6 +149,21 @@ def match_im_label(anno, bldgs, roads, floods, roadspeeds, pre, post):
         out_post.append(post_im)
         
     return out_anno, out_bu, out_ro, out_fl, out_rs, out_pre, out_post
+
+def match_im_label_test(pre, post):
+    out_pre = []
+    out_post = []
+    for i in pre:
+        base = os.path.basename(i).split("_")[1:]
+        tileid = base[0]
+        for sect in base[1:]:
+            tileid += "_" + sect
+        pre_im = [j for j in pre if f"_{tileid}" in j][0]
+        post_im = [j for j in post if f"_{tileid}" in j][0]
+        out_pre.append(pre_im)
+        out_post.append(post_im)
+    
+    return out_pre, out_post
 
 def parse_args():
     parser = argparse.ArgumentParser()

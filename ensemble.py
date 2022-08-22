@@ -3,15 +3,18 @@ Loosley based on Selim_sef spacenet 6
 """
 import argparse
 import csv
+from genericpath import exists
+from operator import gt
 import os
 from multiprocessing.pool import Pool
-import itertools
+import cv2
 
 import numpy as np
 import torch
 from osgeo import gdal, osr
 from tqdm import tqdm
 
+from config_foundation import get_multi_config, get_multi_config2, get_multi_config3
 from skimage import measure
 from skimage.segmentation import watershed
 from skimage.feature import peak_local_max
@@ -24,22 +27,35 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
+def downsample(image, channels, output_size=(1300,1300), input_size=(2600,2600)):
+    input_size = input_size[0]
+    output_size = output_size[0]
+    bin_size = input_size // output_size
+    image = image.reshape((channels, output_size, bin_size,
+                                        output_size, bin_size)).max(4).max(2)
+    return image
 
+
+# def parse_args():
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--predictions_dir",
+#                         type=str,
+#                         default="predictions")
+#     parser.add_argument("--ground_truth_dir",
+#                         type=str,
+#                         default="ground_truth")
+#     parser.add_argument("--out_dir",
+#                         type=str,
+#                         default="foundation_predictions")
+#     parser.add_argument("--train_predictions_dir",
+#                         type=str)
+#     parser.add_argument("--train_out")
+#     args = parser.parse_args()
+#     return args
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--predictions_dir",
-                        type=str,
-                        default="predictions")
-    parser.add_argument("--ground_truth_dir",
-                        type=str,
-                        default="ground_truth")
-    parser.add_argument("--out_dir",
-                        type=str,
-                        default="foundation_predictions")
-    parser.add_argument("--train_predictions_dir",
-                        type=str)
-    parser.add_argument("--train_out")
+    parser.add_argument("-v", type=int)
     args = parser.parse_args()
     return args
 
@@ -66,7 +82,7 @@ def hard_voting(images):
 def ensemble_image(args_list):
     image, dirs, out_dir, gt_dir = args_list
     save_preds_dir = out_dir
-
+    
     building_predictions = []
     road_predictions = []
     current_image_filename = ''
@@ -77,19 +93,10 @@ def ensemble_image(args_list):
             building_predictions.append(in_prediction["building_prediction"])
             road_predictions.append(in_prediction["road_prediction"])
             current_image_filename = str(in_prediction["tif_path"])
+            output_tif = os.path.join(save_preds_dir, os.path.basename(current_image_filename.replace(".tif","_roadspeedpred.tif")))
+            if os.path.exists(output_tif):
+                return [[],[],]
 
-    if gt_dir is not None:
-        with open(os.path.join(gt_dir, image), "rb") as f:
-            gts = np.load(f)
-            gt_building = gts["gt_building"]
-            gt_roadspeed = gts["gt_roadspeed"]
-        
-       
-
-    gts = np.zeros((2, 8, gt_building.shape[-2], gt_building.shape[-1]))
-    gts[0,0] = gt_building
-    gts[1,:] = gt_roadspeed
-    
 
     road_predictions = np.array(road_predictions)
     road_prediction = average_strategy(road_predictions)
@@ -100,7 +107,6 @@ def ensemble_image(args_list):
     road_prediction = torch.sigmoid(torch.from_numpy(road_prediction)).numpy()
 
 
-    
     building_prediction = watershed_mod(building_prediction, 
                     thresh_l=0.4, thresh_h=0.6)
     building_prediction = np.rint(building_prediction).astype(int)
@@ -109,6 +115,9 @@ def ensemble_image(args_list):
     predictions = np.zeros((2, 8, building_prediction.shape[0], building_prediction.shape[1]))
     predictions[0,0] = building_prediction
     predictions[1,:] = roadspeed_prediction
+
+    building_prediction = downsample(building_prediction, channels=1)[0]
+    roadspeed_prediction = downsample(road_prediction, channels=8)
 
     if save_preds_dir is not None:
         # road_pred_arr = (road_prediction * 255).astype(np.uint8) # to be compatible with the SN5 eval and road speed prediction, need to mult by 255
@@ -132,30 +141,38 @@ def ensemble_image(args_list):
                     xmin, xres, ymax, yres,
                     raster_srs, building_pred_arr)
     
-
-
     metrics = [[], []]
-    for j in range(len(gts)): # iterate through the building and road gt
-        prediction = predictions[j]
-        gt = gts[j]
-        if j == 1: # it's roadspeed, so get binary pred and gt for metrics
-            prediction = prediction[-1]
-            gt = gt[-1]
+    if gt_dir is not None:
+        with open(os.path.join(gt_dir, image), "rb") as f:
+            gts = np.load(f)
+            gt_building = gts["gt_building"]
+            gt_roadspeed = gts["gt_roadspeed"]
         
-        tp = np.rint(prediction * gt)
-        fp = np.rint(prediction - tp)
-        fn = np.rint(gt - tp)
-         
-        union = np.rint(np.sum(prediction + gt - tp))
-        tp = np.sum(tp).astype(int)
-        fp = np.sum(fp).astype(int)
-        fn = np.sum(fn).astype(int)
+        gts = np.zeros((2, 8, gt_building.shape[-2], gt_building.shape[-1]))
+        gts[0,0] = gt_building
+        gts[1,:] = gt_roadspeed
+        
+        for j in range(len(gts)): # iterate through the building and road gt
+            prediction = predictions[j]
+            gt = gts[j]
+            if j == 1: # it's roadspeed, so get binary pred and gt for metrics
+                prediction = prediction[-1]
+                gt = gt[-1]
+            
+            tp = np.rint(prediction * gt)
+            fp = np.rint(prediction - tp)
+            fn = np.rint(gt - tp)
+            
+            union = np.rint(np.sum(prediction + gt - tp))
+            tp = np.sum(tp).astype(int)
+            fp = np.sum(fp).astype(int)
+            fn = np.sum(fn).astype(int)
 
-        metrics[j].append(union)
-        metrics[j].append(tp)
-        metrics[j].append(fp)
-        metrics[j].append(fn)
-    
+            metrics[j].append(union)
+            metrics[j].append(tp)
+            metrics[j].append(fp)
+            metrics[j].append(fn)
+        
     return  metrics  
 
 def ensemble_train_image(args_list):
@@ -190,20 +207,12 @@ def ensemble_train_image(args_list):
                     roadspeed_prediction=roadspeed_prediction[-1])
     # make_prediction_png_roads_buildings(preimg, gts, predictions, save_figure_filename)
 
-
-if __name__ == "__main__":
-    
-    args = parse_args()
-    predictions_dir = args.predictions_dir
-    gt_dir = args.ground_truth_dir
-    out_dir = args.out_dir
-
-    check_dir_exists(out_dir)
-
+def ensemble(predictions_dir, out_dir, gt_dir=None):
     dirs = [os.path.join(predictions_dir, d) for d in os.listdir(predictions_dir)]
     n_threads = 16
     images = os.listdir(dirs[0])
-    
+    images = [image for image in os.listdir(dirs[0]) if image[-4:] != ".csv"]
+
     args_list = []
     for image in images:
         args_list.append((image, dirs, out_dir, gt_dir))
@@ -216,60 +225,87 @@ if __name__ == "__main__":
     with Pool(n_threads) as pool:
         with tqdm(total=len(args_list)) as pbar:
             for metrics in pool.imap_unordered(ensemble_image, args_list):
-                for idx, (union, tp, fp, fn) in enumerate(metrics):
-                    running_tp[idx] += tp
-                    running_fp[idx] += fp
-                    running_fn[idx] += fn
-                    running_union[idx] += union
+                if gt_dir is not None:
+                    for idx, (union, tp, fp, fn) in enumerate(metrics):
+                        running_tp[idx] += tp
+                        running_fp[idx] += fp
+                        running_fn[idx] += fn
+                        running_union[idx] += union
                 pbar.update()
-
-    print()
-    data = ["building", "road"]
-    out =  {"building" : {}, "road" : {}}
-    for i in range(len(running_tp)):
-        print(f"final metrics for: {data[i]}")
-        precision = running_tp[i] / (running_tp[i] + running_fp[i] + 0.00001)
-        recall = running_tp[i] / (running_tp[i] + running_fn[i] + 0.00001)
-        f1 = 2 * (precision * recall)  / (precision + recall + 0.00001)
-        iou = running_tp[i]  / (running_union[i] + 0.00001)
-        out[data[i]]["precision"] = precision
-        out[data[i]]["recall"] = recall
-        out[data[i]]["f1"] = f1
-        out[data[i]]["iou"] = iou
-
-        print("final running evaluation score: ")
-        print("precision: ", precision)
-        print("recall: ", recall)
-        print("f1: ", f1)
-        print("iou: ", iou)
+    if gt_dir is not None:
         print()
-       
-        final_out_csv = os.path.join(args.out_dir, f"final_out.csv")
-        fields = ["data_type", 
-                "precision", 
-                "recall", 
-                "f1", 
-                "iou",]
-        with open(final_out_csv, "w", newline='') as f:
-            w = csv.DictWriter(f, fields)
-            w.writeheader()
-            for k in out:
-                w.writerow({field: out[k].get(field) or k for field in fields})
-           
+        data = ["building", "road"]
+        out =  {"building" : {}, "road" : {}}
+        for i in range(len(running_tp)):
+            print(f"final metrics for: {data[i]}")
+            precision = running_tp[i] / (running_tp[i] + running_fp[i] + 0.00001)
+            recall = running_tp[i] / (running_tp[i] + running_fn[i] + 0.00001)
+            f1 = 2 * (precision * recall)  / (precision + recall + 0.00001)
+            iou = running_tp[i]  / (running_union[i] + 0.00001)
+            out[data[i]]["precision"] = precision
+            out[data[i]]["recall"] = recall
+            out[data[i]]["f1"] = f1
+            out[data[i]]["iou"] = iou
 
-    if args.train_predictions_dir:
-        out_dir = args.train_out
-        check_dir_exists(out_dir)
-        dirs = [os.path.join(args.train_predictions_dir, d) for d in os.listdir(args.train_predictions_dir)]
-        n_threads = 16
-        args_list = []
-        images = os.listdir(dirs[0])
+            print("final running evaluation score: ")
+            print("precision: ", precision)
+            print("recall: ", recall)
+            print("f1: ", f1)
+            print("iou: ", iou)
+            print()
+        
+            final_out_csv = os.path.join(out_dir, f"final_out.csv")
+            fields = ["data_type", 
+                    "precision", 
+                    "recall", 
+                    "f1", 
+                    "iou",]
+            with open(final_out_csv, "w", newline='') as f:
+                w = csv.DictWriter(f, fields)
+                w.writeheader()
+                for k in out:
+                    w.writerow({field: out[k].get(field) or k for field in fields})
+            
 
-        for image in images:
-            args_list.append((image, dirs, out_dir))
+    # if config.SAVE_TRAINING_PREDS:
+    #     out_dir = config.TRAINING_SAVE_DIR
+    #     check_dir_exists(out_dir)
+    #     dirs = [os.path.join(config.MULTI_TRAIN_SAVE_PATH, d) for d in os.listdir(config.MULTI_TRAIN_SAVE_PATH)]
+    #     n_threads = 16
+    #     args_list = []
+    #     images = os.listdir(dirs[0])
+
+    #     for image in images:
+    #         args_list.append((image, dirs, out_dir))
         
-        with Pool(n_threads) as pool:
-            with tqdm(total=len(args_list)) as pbar:
-                for _ in pool.imap_unordered(ensemble_train_image, args_list):
-                    pbar.update()
+    #     with Pool(n_threads) as pool:
+    #         with tqdm(total=len(args_list)) as pbar:
+    #             for _ in pool.imap_unordered(ensemble_train_image, args_list):
+    #                 pbar.update()
         
+
+if __name__ == "__main__":
+    args = parse_args()
+    if args.v == 1:
+        config = get_multi_config(1)
+    if args.v == 2:
+        config = get_multi_config2(1)
+    if args.v == 3:
+        config = get_multi_config3(1)
+    else:
+        config = get_multi_config(1)
+
+    # config.PATH_SAVE_PREDS = "foundation_preds/train_out"
+    # config.PATH_SAVE_FINAL_PREDS = "foundation_preds/test_out"
+    out_dir = config.PATH_SAVE_FINAL_PREDS
+    predictions_dir = config.PATH_SAVE_PREDS
+
+    if config.TESTING:
+        gt_dir=None
+    else:
+        gt_dir = config.PATH_GT_SAVE
+    
+    os.makedirs(out_dir, 0o777, exist_ok=True)
+    ensemble(predictions_dir=predictions_dir, out_dir=out_dir, gt_dir=gt_dir)
+
+    

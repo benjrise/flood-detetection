@@ -331,6 +331,7 @@ def G_to_wkt(G, add_small=True, connect_crossroads=True,
 
         if not len(coord_list):
             continue
+       
         segments = remove_duplicate_segments(coord_list)
         # print("segments:", segments)
         # return
@@ -827,9 +828,16 @@ if __name__ == "__main__":
     print("output graph dir: ", outgdir)
     print("output csv dir: ", outcsvsdir)
     print("output skeleton dir: ", outskedir)
-    
+
     final_df = pd.DataFrame(columns=['ImageId', 'WKT_Pix'])
     for img_loc in images:
+        # if os.path.basename(img_loc) != "10500500C4DD7000_0_24_66_roadspeedpred.tif":
+        #         print("here")
+        #         continue
+        # if os.path.basename(img_loc) != "104001006504F400_0_11_32_roadspeedpred.tif":
+        #     print("here")
+        #     continue
+
         # get the relative filepaths of the output
         if outshpdir is not None:
             out_shp = os.path.join(outshpdir, os.path.basename(img_loc)[:-4]+".shp")
@@ -858,7 +866,7 @@ if __name__ == "__main__":
                                     skeleton_band=7,
                                     kernel_blur=27,
                                     min_background_frac=0.2,
-                                    verbose=True)
+                                    verbose=False)
 
         min_spur_length_m = 10
         ds = gdal.Open(img_loc)
@@ -880,15 +888,15 @@ if __name__ == "__main__":
             G, ske, img_refine = img_to_ske_G(img, ske,
                                                 min_spur_length_pix=min_spur_length_pix,
                                                 out_gpickle=out_graph_filename,
-                                                verbose=True)
-
-
+                                                verbose=False)
+            # if os.path.basename(img_loc) != "10500500C4DD7000_0_24_66_roadspeedpred.tif":
+            #     print("here")
             df = build_wkt_linestrings(G,
                                         out_csv,
                                         out_shp,
                                         reference_image_filename=img_loc,
                                         add_small=True,
-                                        verbose=True,
+                                        verbose=False,
                                         super_verbose=False)
             final_df = final_df.append(df)
     final_df.to_csv(os.path.join(out_dir, "sknw_wkt.csv"), index=False)

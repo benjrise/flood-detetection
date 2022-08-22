@@ -1,20 +1,3 @@
-#!/usr/bin/env python2
-# -*- coding: utf-8 -*-
-"""
-Directly from: https://github.com/avanetten/cresi
-with small modifications
-"""
-
-
-"""
-Created on Tue May  8 00:10:40 2018
-@author: avanetten
-Read in a list of wkt linestrings, render to networkx graph, with geo coords
-Note:
-    osmnx.simplify_graph() is fragile and often returns erroneous projections
-"""
-
-
 import os
 import utm
 import shapely.wkt
@@ -227,7 +210,8 @@ def wkt_list_to_nodes_edges(wkt_list, node_iter=10000, edge_iter=10000):
                 # shouldn't be duplicate edges, so break if we see one
                 if (edge_loc in edge_loc_set) or (edge_loc_rev in edge_loc_set):
                     print ("Oops, edge already seen, returning:", edge_loc)
-                    return
+                    # return
+                    break
                 
                 # get distance to prev_loc and current loc
                 proj_prev = shape.project(Point(prev_loc))
@@ -840,6 +824,13 @@ def wkt_to_G(params):
     # print("wkt_list:", wkt_list)
     pickle_protocol = 4
     
+    # if os.path.basename(im_file) == '104001006504F400_0_35_10_roadspeedpred.tif':
+    #     print("here")
+    #     wkt_list = [wkt_list[93], wkt_list[95], wkt_list[96]]
+    #     os.path.basename(im_file)== '10500500C4DD7000_0_24_66_roadspeedpred.tif':
+    #     print("here debug", im_file)
+    
+
     t0 = time.time()
     if verbose:
         print ("Running wkt_list_to_nodes_edges()...")
@@ -940,11 +931,9 @@ def wkt_to_G(params):
             edge_tmp = list(G1.edges())[-1]
             print(edge_tmp, "random edge props:", G1.get_edge_data(edge_tmp[0], edge_tmp[1]))
 
-        
         if verbose:
             print ("projecting graph...")
         G_projected = ox.project_graph(G1)
-        #print(G_projected.edges(data=True))
         #for i,(u,v,attr_dict) in enumerate(G1.edges(data=True)):
             #if "geometry" not in attr_dict:
             #    print("hello")
@@ -1224,7 +1213,7 @@ if __name__ == "__main__":
     # the new graphs are a result of several cleaning steps and also includes length of edges as an attribute.
 
     simplify_graph = True #True # False
-    verbose = True #sFalse
+    verbose = False #sFalse
     super_verbose = False
     make_plots = True #True
     save_shapefiles = True #False

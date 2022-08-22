@@ -1,25 +1,31 @@
-import csv
-import os
 import argparse
+import csv
 import datetime
+import os
+import ssl
 from datetime import datetime
-from flood_eval import flood_final_eval_loop, multi_model_eval_loop
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
-
-from datasets.datasets import SN8Dataset, SN8FloodDataset
 import models.pytorch_zoo.unet as unet
-from models.other.unet import UNetSiamese
-from models.other.siamunetdif import SiamUnet_diff
+from config_flood import (FloodConfig, get_multi_flood_config,
+                          get_multi_flood_config2)
+from datasets.datasets import SN8Dataset, SN8FloodDataset
+from flood_eval import flood_final_eval_loop, multi_model_eval_loop
+from models.efficientnet.efficient_unet import (EfficientNet_Unet,
+                                                EfficientNet_Unet_Double,
+                                                EfficientNet_Unet_DoubleGlobal)
+from models.hrnet.hr_config import get_hrnet_config
+from models.hrnet.hrnet import HRNET_SIAMESE, get_siamese_model
 from models.other.siamnestedunet import SNUNet_ECAM
-from models.efficientnet.efficient_unet import EfficientNet_Unet, EfficientNet_Unet_Double
-from utils.utils import get_transforms
-from config_flood import FloodConfig, get_multi_flood_config
-import ssl
+from models.other.siamunetdif import SiamUnet_diff
+from models.other.unet import UNetSiamese
+from utils.utils import get_transforms, train_validation_file_split
+from core.losses import jaccard_loss_multi_class
+
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
@@ -27,8 +33,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",
                         type=int)
-    parser.add_argument("-m",
-                        action="store_true")
+    parser.add_argument("-v",
+                        type=int)
     args = parser.parse_args()
     return args
 
@@ -68,23 +74,25 @@ if __name__ ==  "__main__":
     
     args = parse_args()
     if args.config:
-        if args.m:
+        if args.v == 1:
             config = get_multi_flood_config(args.config)
+        elif args.v == 2:
+            config = get_multi_flood_config2(args.config)
         else:
-            config = FloodConfig()
+            config = get_hrnet_config(args.config)
     else:
         config = FloodConfig()
     train_csv = config.TRAIN_CSV
     val_csv = config.VAL_CSV
     save_dir = config.SAVE_DIR
-    model_name = config.MODEL_NAME
+    model = config.MODEL
     initial_lr = config.LR
     batch_size = config.BATCH_SIZE
     n_epochs = config.NUM_EPOCHS
     gpu = config.GPU
     print(n_epochs)
 
-    print(model_name)
+    print(model)
     
     now = datetime.now() 
     date_total = str(now.strftime("%d-%m-%Y-%H-%M"))
@@ -105,15 +113,10 @@ if __name__ ==  "__main__":
     SEED=12
     torch.manual_seed(SEED)
     
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
-        os.chmod(save_dir, 0o777)
-
+    os.makedirs(save_dir, mode=0o777, exist_ok=True)
     save_dir = os.path.join(save_dir, f"{config.RUN_NAME}_lr{'{:.2e}'.format(initial_lr)}_bs{batch_size}_{date_total}")
 
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
-        os.chmod(save_dir, 0o777)
+    os.makedirs(save_dir, mode=0o777, exist_ok=True)
     checkpoint_model_path = os.path.join(save_dir, "model_checkpoint.pth")
     best_model_path = os.path.join(save_dir, "best_model.pth")
     training_log_csv = os.path.join(save_dir, "log.csv")
@@ -129,6 +132,9 @@ if __name__ ==  "__main__":
     train_transforms, validation_transforms = get_transforms(crop=config.TRAIN_CROP,
                                                     center_crop=config.VALIDATION_CROP)
     
+    train_files, val_files = train_validation_file_split(0, 
+                            data_to_load=["preimg","postimg","flood"])
+
     if config.USE_FOUNDATION_PREDS:
         train_dataset = SN8FloodDataset(train_csv,
                                 data_to_load=["preimg",
@@ -143,12 +149,12 @@ if __name__ ==  "__main__":
                                 training_preds_dir="foundation_pres_hold/foundation_out")
     else:
 
-        train_dataset = SN8Dataset(train_csv,
+        train_dataset = SN8Dataset(train_files,
                                 data_to_load=["preimg","postimg","flood"],
                                 img_size=img_size,
                                 transforms=train_transforms,
                                 )
-        val_dataset = SN8Dataset(val_csv,
+        val_dataset = SN8Dataset(val_files,
                                 data_to_load=["preimg","postimg","flood"],
                                 img_size=img_size,
                                 transforms=validation_transforms)
@@ -158,24 +164,30 @@ if __name__ ==  "__main__":
 
     # model = models["resnet34"](num_classes=5, num_channels=6)
     if config.SIAMESE:
-        if model_name == "unet_siamese":
+        if model == "unet_siamese":
             model = UNetSiamese(3, num_classes, bilinear=True)
-        elif model_name[:13] == "efficientnet-":
-            model = EfficientNet_Unet_Double(name=model_name,
+        elif model[:13] == "efficientnet-":
+            model = EfficientNet_Unet_Double(name=model,
                                     pretrained=config.PRETRAIN, 
                                     in_channels=3, 
                                     num_classes=5,
+                                    load_path="cross_folds/foundation_save/efficientnet-b4_1_lr1.00e-04_bs4_21-08-2022-17-06/best_model.pth"
                                     )
-    
+        elif model == "global":
+            model = EfficientNet_Unet_DoubleGlobal(name="efficientnet-b4",
+                        )
+        elif model == "hrnet":
+            model_config = get_hrnet_config("models/hrnet/hr_config.yml")
+            model = get_siamese_model(model_config, pretrained=config.PRETRAIN)
     else:
-        if model_name[:13] == "efficientnet-":
-            model = EfficientNet_Unet(name=model_name,
+        if model[:13] == "efficientnet-":
+            model = EfficientNet_Unet(name=model,
                                     pretrained=config.PRETRAIN, 
                                     in_channels=6, 
                                     num_classes=5,
                                     mode="flood")
         else:
-            model = models[model_name](num_classes=num_classes, 
+            model = models[model](num_classes=num_classes, 
                                         num_channels=6,
                                         )
 
@@ -184,11 +196,14 @@ if __name__ ==  "__main__":
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
     scaler = torch.cuda.amp.GradScaler(enabled=config.MIXED_PRECISION)
 
+    class_weights = torch.Tensor([0.1, 0.1, 0.35, 0.1, 0.35]).to(device)
+    class_weights = None
     if class_weights is None:
         celoss = nn.CrossEntropyLoss()
     else:
         celoss = nn.CrossEntropyLoss(weight=class_weights)
-
+    
+    
     best_loss = np.inf
     for epoch in range(n_epochs):
         print(f"EPOCH {epoch}")
@@ -239,9 +254,13 @@ if __name__ ==  "__main__":
                 #focal_l = focal(y_pred, flood)
                 #dice_soft_l = soft_dice_loss(y_pred, flood)
                 #loss = (focal_loss_weight * focal_l + soft_dice_loss_weight * dice_soft_l)
-                loss = celoss(flood_pred, flood.long())
+                
+                loss = config.BCE_WEIGHT * celoss(flood_pred, flood.long())
+                if config.JACCARD_WEIGHT:
+                    loss  += config.JACCARD_WEIGHT * jaccard_loss_multi_class(flood_pred, flood.long())
 
-                train_loss_val+=loss
+
+                train_loss_val+= loss
             #train_focal_loss += focal_l
             #train_soft_dice_loss += dice_soft_l
             scaler.scale(loss).backward()
@@ -305,7 +324,9 @@ if __name__ ==  "__main__":
                     #dice_soft_l = soft_dice_loss(y_pred, flood)
                     #loss = (focal_loss_weight * focal_l + soft_dice_loss_weight * dice_soft_l)
 
-                    loss = celoss(flood_pred, flood.long())
+                    loss = config.BCE_WEIGHT * celoss(flood_pred, flood.long())
+                    if config.JACCARD_WEIGHT:
+                        loss  += config.JACCARD_WEIGHT * jaccard_loss_multi_class(flood_pred, flood.long())
 
                     #val_focal_loss += focal_l
                     #val_soft_dice_loss += dice_soft_l
@@ -331,8 +352,10 @@ if __name__ ==  "__main__":
             best_loss = epoch_val_loss
             save_best_model(model, best_model_path)
 
-    if config.FINAL_EVAL_LOOP:
-        flood_final_eval_loop(config, model, val_dataset, save_dir)
-    
+   
     if config.MULTI_MODEL:
         multi_model_eval_loop(config, model, save_dir)
+
+    if config.FINAL_EVAL_LOOP:
+        flood_final_eval_loop(config, model, save_dir)
+    

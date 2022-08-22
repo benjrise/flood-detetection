@@ -42,7 +42,11 @@ def parse_args():
     parser.add_argument("--percent_positive",
                         type=float,
                         required=False,
-                        default=0.5)    
+                        default=0.25)    
+    parser.add_argument("--scale",
+                        type=float,
+                        required=False,
+                        default=2.)
     args = parser.parse_args()
     return args
 
@@ -56,7 +60,7 @@ def make_wgs84_utm_srs(longitude, latitude):
     srs.SetWellKnownGeogCS("WGS84")
     return srs
 
-def geo_coords_to_image_coords(image_geotran, in_wkt):
+def geo_coords_to_image_coords(image_geotran, in_wkt, scale=2.):
     """translates WKT geometry in geographic coordinates wgs84 (latitude, longitude) 
     to WKT geometry in image coordinates (col, row)"""
     xmin = image_geotran[0]
@@ -70,6 +74,8 @@ def geo_coords_to_image_coords(image_geotran, in_wkt):
     outcoords = [] # [(x. y),(x, y), ...]
     for coord in range(len(x)):\
         outcoords.append((int((x[coord]-xmin)/xres), int((y[coord]-ymax)/yres)))
+    #out_wkt = Polygon(outcoords).wkt
+    
     out_wkt = Polygon(outcoords).wkt
     return out_wkt
     
@@ -202,7 +208,7 @@ def main_w_flood(root_dir,
                 square_size=5,
                 min_area=5,
                 simplify_tolerance=0.75,
-                perc_positive=0.5):
+                perc_positive=0.0):
     """ function that conflates the flood predictions with the buildings in the foundation features predictions. 
     
     Parameters:
@@ -224,7 +230,7 @@ def main_w_flood(root_dir,
     bld_preds = glob.glob(root_dir + "/*buildingpred.tif")
     print(f"postprocessing {len(bld_preds)} tiles")
 
-    cols = ['ImageId','Object','Flooded','Wkt_Pix','Wkt_Geo']
+    cols = ['ImageId','Object','Flooded','Wkt_Pix', 'length_m', 'travel_time_s']
     record_list = []
     count = 0
     for in_file in bld_preds:
@@ -273,12 +279,15 @@ def main_w_flood(root_dir,
         image_geotran = ds.GetGeoTransform()
         ds = None
         if len(feats) == 0: # no buildings detecting in the tile, write no prediction to submission
-            record_list.append([name_root, 'Building', 'Null', 'POLYGON EMPTY', 'POLYGON EMPTY'])
+            record_list.append([name_root, 'Building', 'POLYGON EMPTY', 'Null', 'Null', 'Null'])
         else:
             for f in feats:
                 wkt_image_coords = geo_coords_to_image_coords(image_geotran, f['geometry'])
                 flood_val = 'True' if f['properties']['mask_val'] == 2 else 'False'
-                record_list.append([name_root, 'Building', flood_val, wkt_image_coords, f['geometry']])
+                #record_list.append([name_root, 'Building', flood_val, wkt_image_coords, f['geometry'], 'null', 'null'])
+                #wkt_image_coords = shapely.affinity.scale(wkt_image_coords, xfact=0.5, yfact=0.5)
+                record_list.append([name_root, 'Building',  wkt_image_coords,  flood_val, 'Null', 'Null'])
+        
         count+=1
         print(f"{np.round((count/len(bld_preds))*100, 2)}%  ", end="\r")
     print()
@@ -296,6 +305,8 @@ if __name__ == "__main__":
     min_area = args.min_area
     simplify_tolerance = args.simplify_tolerance
     perc_positive = args.percent_positive
+    ### Change depending on times images upsampled by i.e. (1300,1300)->(2600,2600) is scale of 2.
+    scale = args.scale
 
     main_w_flood(root_dir,
                 flood_dir,

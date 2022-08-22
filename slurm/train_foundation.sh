@@ -1,1 +1,0 @@
-/users/benjrise/volatile/train_foundation.sh

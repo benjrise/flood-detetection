@@ -1,1 +1,0 @@
-/users/benjrise/volatile/slurm_train_foundation.sh

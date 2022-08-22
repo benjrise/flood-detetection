@@ -13,6 +13,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import os
+import csv
+import copy
 
 def write_geotiff(output_tif, ncols, nrows,
                   xmin, xres,ymax, yres,
@@ -136,3 +138,29 @@ def check_dir_exists(dir):
             pass
     print(f"Directory: {dir} exists.")
     return
+
+
+
+def train_validation_file_split(val_fold_id, data_to_load, csv_path="areas_of_interest/sn8_full_data.csv"):
+    train_files = []
+    val_files = []
+    all_data_types = ["preimg", "postimg", "building", "road", "roadspeed", "flood"]
+    dict_template = {}
+    for i in all_data_types:
+        dict_template[i] = None
+
+    with open(csv_path, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            in_data = copy.copy(dict_template)
+            for j in data_to_load:
+                if j == "training_preds":
+                    continue
+                if j == "fold_id":
+                    continue
+                in_data[j]=row[j]
+            if int(row["fold_id"]) == val_fold_id:
+                val_files.append(in_data)
+            else:
+                train_files.append(in_data)
+    return train_files, val_files

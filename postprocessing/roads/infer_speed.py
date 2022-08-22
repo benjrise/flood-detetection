@@ -426,10 +426,15 @@ def infer_travel_time(params):
                       save_shapefiles, im_root, graph_dir_out \
     = params
     print("im_root:", im_root)
+
+    # if im_root == "10500500C4DD7000_0_24_66_roadspeedpred":
+    #     print("here")
+    # else:
+    #     return
     
     mph_to_mps = 0.44704   # miles per hour to meters per second
     pickle_protocol = 4
-    
+    verbose=True
     for i,(u, v, edge_data) in enumerate(G_.edges(data=True)):
         if verbose: #(i % 100) == 0:
             logger1.info("\n" + str(i) + " " + str(u) + " " + str(v) + " " \
@@ -444,7 +449,7 @@ def infer_travel_time(params):
                              max_speed_band=max_speed_band, 
                              use_weighted_mean=use_weighted_mean,
                              variable_edge_speed=variable_edge_speed,
-                             verbose=verbose)
+                             verbose=False)
         # update edges
         edge_data['Travel Time (h)'] = tot_hours
         edge_data['inferred_speed_mph'] = np.round(mean_speed_mph, 2)
@@ -541,6 +546,9 @@ def add_travel_time_dir(graph_dir, mask_dir, conv_dict, graph_dir_out,
             im_root = im_root.split(mask_prefix)[-1]
         out_file = os.path.join(graph_dir_out, im_root + '.gpickle')
            
+        if im_root == "10500500C4DD7000_0_24_66_roadspeedpred":
+            print("here")
+
         if (i % 1) == 0:
             logger1.info("\n" + str(i+1) + " / " + str(len(image_names)) + " " + image_name + " " + im_root)
         mask_path = os.path.join(mask_dir, image_name)

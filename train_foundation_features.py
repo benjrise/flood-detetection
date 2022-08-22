@@ -3,7 +3,7 @@ import os
 import argparse
 from datetime import date, datetime
 from tqdm.auto import tqdm
-from models.efficientnet.efficient_unet import EfficientNet_Unet
+from models.efficientnet.efficient_unet import EfficientNet_Unet, EfficientNetSeperate
 
 import torch
 import torch.nn as nn
@@ -12,23 +12,44 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from datasets.datasets import SN8Dataset
-from core.losses import ComputeLoss, focal, jaccard_loss, soft_dice_loss
+from core.losses import ComputeLoss
 import models.pytorch_zoo.unet as unet
 from models.other.unet import UNet
-from utils.utils import get_transforms
-from config_foundation import FoundationConfig, get_config, get_multi_config
+from utils.utils import get_transforms, train_validation_file_split
+from config_foundation import FoundationConfig, get_config, get_multi_config, get_multi_config2, get_multi_config3
 from models.hrnet.hrnet import HighResolutionNet, get_seg_model
 from models.hrnet.hr_config import get_hrnet_config
 from utils.utils import get_prediction_fig, plot_buildings, check_dir_exists
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+
+def setup(rank, world_size):
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '12355'
+
+        # initialize the process group
+        dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
+def cleanup():
+    dist.destroy_process_group()
+
+# def average_gradients(model):
+#     size = float(dist.get_world_size())
+#     for param in model.parameters():
+#         dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
+#         param.grad.data /= size
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",
                          type=int,)
-    parser.add_argument("-m",
-                        action="store_true",
+    parser.add_argument("-v",
+                        type=int,
                         )
     parser.add_argument("--slurm",
                         action="store_true")
@@ -43,6 +64,7 @@ def save_model_checkpoint(model, checkpoint_model_path):
     torch.save(model.state_dict(), checkpoint_model_path)
 
 
+
 models = {
     'resnet34': unet.Resnet34_upsample,
     'resnet50': unet.Resnet50_upsample,
@@ -55,18 +77,21 @@ models = {
     'unet': UNet,
 }
 
+
 if __name__ == "__main__":
     
     args = parse_args()
 
     if args.config:
-        if args.m:
+        if args.v == 1:
             config = get_multi_config(args.config)
+        if args.v == 2:
+            config = get_multi_config2(args.config)
+        if args.v == 3:
+            config = get_multi_config3(args.config)
         else:
-            config = get_config(args.config)
-        if args.slurm:
-            #### FOR SLURM ARRAYS
-            config.GPU = 0
+            config = get_multi_config(args.config)
+        
     else:
         config = FoundationConfig()
     
@@ -74,7 +99,6 @@ if __name__ == "__main__":
     initial_lr = 1e-4
     batch_size = config.BATCH_SIZE
     n_epochs = config.NUM_EPOCHS
-    gpu = config.GPU
     run_name = config.RUN_NAME
 
     now = datetime.now() 
@@ -82,30 +106,19 @@ if __name__ == "__main__":
     
     img_size = config.IMG_SIZE
 
-    soft_dice_loss_weight = config.SOFT_DICE_LOSS_WEIGHT # road loss
-    focal_loss_weight = config.ROAD_FOCAL_LOSS_WEIGHT # road loss
-    
-    bce_weight = config.BCE_LOSS_WEIGHT
-    jaccard_weight = config.BUILDING_JACCARD_WEIGHT
-    road_loss_weight = config.ROAD_LOSS_WEIGHT
-    building_loss_weight = config.BUILDING_LOSS_WEIGHT
-    b_focal_weight = config.BUILDING_FOCAL_WEIGHT
-
     # os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
     torch.backends.cudnn.benchmark = config.CUDNN_BENCHMARK
     torch.backends.cudnn.enabled = config.CUDNN_ENABLED
     run_name = config.RUN_NAME
 
-    # In case of multi-gpu can select differnt gpus by setting gpu = 0,1,2,3
-    device = torch.device(f'cuda:{gpu}') 
-    # SEED=12
-    # torch.manual_seed(SEED)
+    SEED=12
+    torch.manual_seed(SEED)
 
     save_dir = config.SAVE_DIR
-    check_dir_exists(save_dir)
+    os.makedirs(save_dir, mode=0o777, exist_ok=True)
 
     save_dir = os.path.join(save_dir, f"{run_name}_lr{'{:.2e}'.format(initial_lr)}_bs{batch_size}_{date_total}")
-    check_dir_exists(save_dir)
+    os.makedirs(save_dir, mode=0o777, exist_ok=True)
     
     checkpoint_model_path = os.path.join(save_dir, "model_checkpoint.pth")
     best_model_path = os.path.join(save_dir, "best_model.pth")
@@ -119,19 +132,26 @@ if __name__ == "__main__":
                         p_random_flips=config.P_FLIPS, 
                         center_crop=config.VALIDATION_CROP)
     
-    train_dataset = SN8Dataset(config.TRAIN_CSV,
+    train_files, val_files = train_validation_file_split(config.GPU,
+                                ["preimg","building","roadspeed"], 
+                                config.TRAIN_CSV)
+
+    train_dataset = SN8Dataset(train_files,
                                 data_to_load=["preimg","building","roadspeed"],
                                 img_size=img_size,
                                 transforms=train_transforms)
-    if config.BAGGING:
-        indexes = np.random.choice(range(len(train_dataset)), int(len(train_dataset)*0.9))
-        train_dataset = torch.utils.data.Subset(train_dataset, indexes)
+    # if config.BAGGING:
+    #     possible_indexes = np.arrange(len(train_dataset))
+    #     indexes = np.random.choice(range(len(train_dataset)), int(len(train_dataset)*config.BAGGING_RATIO))
+    #     val_indexes = possible_indexes[possible_indexes != indexes]
+    #     train_dataset = torch.utils.data.Subset(train_dataset, indexes)
+
 
     train_dataloader = torch.utils.data.DataLoader(train_dataset,
-            shuffle=True, num_workers=4, 
-            batch_size=batch_size,
+             num_workers=4, 
+            batch_size=batch_size, shuffle=True,
             )
-    val_dataset = SN8Dataset(config.VAL_CSV,
+    val_dataset = SN8Dataset(val_files,
                             data_to_load=["preimg","building","roadspeed"],
                             img_size=img_size,
                             transforms=validation_transforms)
@@ -144,6 +164,9 @@ if __name__ == "__main__":
     elif model_name == "hrnet":
         model_config = get_hrnet_config("models/hrnet/hr_config.yml")
         model = get_seg_model(model_config, pretrain=config.PRETRAIN)
+    elif model_name == "seperate":
+        model = EfficientNetSeperate("efficientnet-b4")
+    
     elif model_name[:13] == "efficientnet-":
         model = EfficientNet_Unet(name=model_name, 
                                 pretrained=config.PRETRAIN,
@@ -151,12 +174,17 @@ if __name__ == "__main__":
     else:
         model = models[model_name](num_classes=[1, 8], num_channels=3)
     
+    device = torch.device(f"cuda:{config.GPU}")
+    model = model.to(device)
     optimizer = config.get_optimizer(model)
-    model.to(device)
+
     
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
-                            patience=config.PATIENCE, factor=config.FACTOR, 
-                            eps=1e-7, verbose=True)
+    if config.NEW_SCHEDULER:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+    else:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
+                                patience=config.PATIENCE, factor=config.FACTOR, 
+                                eps=1e-7, verbose=True)
     scaler = torch.cuda.amp.GradScaler(enabled=config.MIXED_PRECISION)
 
     best_loss = np.inf
@@ -167,7 +195,8 @@ if __name__ == "__main__":
             config.SOFT_DICE_LOSS_WEIGHT,
             config.ROAD_FOCAL_LOSS_WEIGHT,
             config.BUILDING_JACCARD_WEIGHT,
-            config.BUILDING_FOCAL_WEIGHT
+            config.BUILDING_FOCAL_WEIGHT,
+            config.BUILDING_SOFT_DICE
     )
 
     for epoch in range(n_epochs):
@@ -199,9 +228,8 @@ if __name__ == "__main__":
                         train_metrics[key] = value
                     else:
                         train_metrics[key] += value
-
-                out_loss = train_metrics["loss"]
-                tepoch.set_postfix(loss=out_loss*1.0/(i+1))
+                
+                tepoch.set_postfix(loss=loss.item())
                 
                 n_iter = epoch * len(train_dataloader) + i
                 writer.add_scalar("training_loss_step", loss, n_iter)
@@ -210,9 +238,9 @@ if __name__ == "__main__":
             train_metrics[key] /= len(train_dataloader)
         
         train_metrics["lr"] = optimizer.param_groups[0]['lr']
+        # print(train_metric)
         log_to_tensorboard(writer, train_metrics, epoch)
         train_metrics.clear()
-        
         if epoch % config.VAL_EVERY_N_EPOCH == 0:
             # validation
             model.eval()
@@ -234,28 +262,41 @@ if __name__ == "__main__":
                                     val_metrics[key] = value
                                 else:
                                     val_metrics[key] += value
-                                       
+                                    
                     out_loss = val_metrics["valid_loss"]
                     print(f"    {str(np.round(i/len(val_dataloader)*100,2))}%: VAL LOSS: {(out_loss*1.0/(i+1))}", end="\r")
 
             for key in val_metrics.keys():
                 val_metrics[key] /= len(val_dataloader)
             
-            scheduler.step(val_metrics["valid_loss"])
+            if config.NEW_SCHEDULER:
+                scheduler.step()
+                print("step")
+            else:
+                scheduler.step(val_metrics["valid_loss"])
+                
             log_to_tensorboard(writer, val_metrics, epoch)
             save_model_checkpoint(model, checkpoint_model_path)
 
             epoch_val_loss = val_metrics["valid_loss"]
+            
             if epoch_val_loss < best_loss:
                 print(f"    loss improved from {np.round(best_loss, 6)} to {np.round(epoch_val_loss, 6)}. saving best model...")
                 best_loss = epoch_val_loss
                 save_model_checkpoint(model, best_model_path)
-    
-    if config.MULTI_MODEL:
-        from foundation_eval import multi_model_eval_loop
-        multi_model_eval_loop(config, model, save_dir)
 
+        
+    
+   
+
+    if config.MULTI_MODEL:
+        from foundation_eval import save_model_predictions
+        save_model_predictions(config, model, save_dir)
+    
     if config.FINAL_EVAL_LOOP:
         from foundation_eval import foundation_final_eval_loop
-        foundation_final_eval_loop(config, model, val_dataset, save_dir)
+        foundation_final_eval_loop(config, model, save_dir)
+        
+
+    
     

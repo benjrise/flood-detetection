@@ -19,6 +19,9 @@ from osgeo import osr
 from osgeo import ogr
 from osgeo import gdal
 
+import shapely
+from shapely.geometry import LineString
+
 ###############################################################################
 def write_road_submission_shapefile(df, out_shapefile):
     df = df.reset_index()  # make sure indexes pair with number of rows
@@ -70,7 +73,8 @@ def write_road_submission_shapefile(df, out_shapefile):
 
 def pkl_dir_to_wkt(pkl_dir, output_csv_path='',
                    weight_keys=['length', 'travel_time_s'],
-                   verbose=False):
+                   verbose=False,
+                   ):
     """
     Create submission wkt from directory full of graph pickles
     """
@@ -104,6 +108,11 @@ def pkl_dir_to_wkt(pkl_dir, output_csv_path='',
 
         # extract geometry pix wkt, save to list
         seen_edges = set([])
+        # if name_root == "104001006504F400_0_35_10":
+        #     print("here")
+        # else:
+        #      continue
+
         for i, (u, v, attr_dict) in enumerate(G.edges(data=True)):
             # make sure we haven't already seen this edge
             if (u, v) in seen_edges or (v, u) in seen_edges:
@@ -114,8 +123,17 @@ def pkl_dir_to_wkt(pkl_dir, output_csv_path='',
                 seen_edges.add((u, v))
                 seen_edges.add((v, u))
             geom_pix = attr_dict['geometry_pix']
+            # WORK AROUND FOR WIERD BUG
+            out_string = []
+            for coord in geom_pix.coords:
+                if coord in out_string:
+                    continue
+                else:
+                    out_string.append(coord)
+            geom_pix = LineString(out_string)
+
             if type(geom_pix) != str:
-                geom_pix_wkt = attr_dict['geometry_pix'].wkt
+                geom_pix_wkt = geom_pix.wkt
             else:
                 geom_pix_wkt = geom_pix
             
@@ -195,6 +213,7 @@ def insert_flood_pred(flood_pred_dir, df, output_csv_path, output_shapefile_path
     dx=2
     cols = ['ImageId', 'Object', 'Flooded', 'WKT_Pix', 'WKT_Geo', 'length_m', 'travel_time_s']
     out_rows = []
+    num_flood = 0
     for index, row in df.iterrows():
         imageid = row["ImageId"]
         
@@ -226,17 +245,35 @@ def insert_flood_pred(flood_pred_dir, df, output_csv_path, output_shapefile_path
 
             currow = row
             maxval = np.argmax(np.bincount(nums))
+            # if len(np.bincount(nums)) == 4:
+            #     bins = np.bincount(nums)
+            #     if bins[4] > 0.25 *(bins[0]+bins[3]):
+            #         currow["Flooded"] = "True"
+
             if maxval == 4:
                 currow["Flooded"] = "True"
 
-        out_rows.append([currow[k] for k in list(currow.keys())])
+            out_rows.append([currow[k] for k in list(currow.keys())])
+        else:
+            currow = row
+            for k in list(currow.keys()):
+                if k != "ImageId" and k != "Object" and k != "WKT_Pix":
+                    currow[k] = "Null" 
+            currow["WKT_Pix"] = "LINESTRING EMPTY"
+            currow["Object"] = "Road"
+            currow["Flooded"] = False
+            out_rows.append(row)
+            
+    print(num_flood)
+
 
 
     df = pd.DataFrame(out_rows, columns=cols)
-    #print("df:", df)
-    # save
+    cols = ['ImageId', 'Object', 'WKT_Pix', 'WKT_Geo', 'Flooded',  'length_m', 'travel_time_s']
+    df = df.reindex(columns=cols)
+    # REMOVE WKT_Geo
     if len(output_csv_path) > 0:
-        df.to_csv(output_csv_path, index=False)
+        df.loc[:, df.columns!='WKT_Geo'].to_csv(output_csv_path, index=False)
     
     write_road_submission_shapefile(df, output_shapefile_path)
 
